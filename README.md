@@ -172,8 +172,7 @@ LewWeb is designed to be controlled from the command line. The browser provides 
 | ` --reset-config <File>`           | Reset a configuration file to defaults.       |
 | ` --show-url `                     | Print the current page URL.                   |
 
-
-##(notice: lew-dlp is not yet on Github so it won't work.)
+(notice: lew-dlp is not yet on Github so it won't work.)
 
 ### Examples
 
