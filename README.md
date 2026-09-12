@@ -162,6 +162,7 @@ LewWeb is designed to be controlled from the command line. The browser provides 
 | `--zoom <percentage>`              | Sets the zoom percentage.                     |
 | `--download-file <url>`            | Downloads a file using Qt WebEngine.          |
 | `--download-pinterest-image <url>` | Downloads a Pinterest image using `lew-dlp`.  |
+                              (notice: lew-dlp is not yet on Github so it won't work.)
 | `--new-bookmark <name>`            | Creates a bookmark.                           |
 | `--save-bookmark <name>`           | Saves the current page as a bookmark.         |
 | `--open-bookmark <name>`           | Opens a bookmark.                             |
