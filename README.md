@@ -123,6 +123,86 @@ The interface doesn't try to imitate every feature of a conventional browser.
 
 Instead, it asks what happens when browsing is controlled primarily through commands and the keyboard.
 
+## Command-Line Options
+
+LewWeb is designed to be controlled from the command line. The browser provides options for navigation, searching, tabs, bookmarks, configuration, downloads, fullscreen, JavaScript, and zoom.
+
+| Option                             | Description                                   |
+| ---------------------------------- | --------------------------------------------- |
+| `-h, --help`                       | Displays help on command-line options.        |
+| `--help-all`                       | Displays help, including generic Qt options.  |
+| `-v, --version`                    | Displays version information.                 |
+| `--quiet`                          | Suppresses Qt and Chromium logging.           |
+| `--config <file>`                  | Loads browser configuration from a JSON file. |
+| `--open <url>`                     | Opens a URL.                                  |
+| `--search <query>`                 | Searches DuckDuckGo.                          |
+| `--wikipedia`                      | Searches Wikipedia.                           |
+| `--github`                         | Searches GitHub.                              |
+| `--youtube`                        | Searches YouTube.                             |
+| `--reddit`                         | Searches Reddit.                              |
+| `--google`                         | Searches Google.                              |
+| `--images`                         | Searches DuckDuckGo Images.                   |
+| `--news`                           | Searches DuckDuckGo News.                     |
+| `--home`                           | Opens the configured homepage.                |
+| `--back`                           | Goes back.                                    |
+| `--forward`                        | Goes forward.                                 |
+| `--reload`                         | Reloads the current page.                     |
+| `--stop`                           | Stops loading.                                |
+| `--new-tab`                        | Opens a new tab.                              |
+| `--close-tab`                      | Closes the current tab.                       |
+| `--tab <number>`                   | Selects a tab by number.                      |
+| `--next-tab`                       | Selects the next tab.                         |
+| `--previous-tab`                   | Selects the previous tab.                     |
+| `--list-tabs`                      | Lists open tabs.                              |
+| `--fullscreen`                     | Toggles fullscreen.                           |
+| `--exit-fullscreen`                | Exits fullscreen.                             |
+| `--javascript <on\|off>`           | Enables or disables JavaScript.               |
+| `--zoom-in`                        | Increases zoom.                               |
+| `--zoom-out`                       | Decreases zoom.                               |
+| `--zoom <percentage>`              | Sets the zoom percentage.                     |
+| `--download-file <url>`            | Downloads a file using Qt WebEngine.          |
+| `--download-pinterest-image <url>` | Downloads a Pinterest image using `lew-dlp`.  |
+| `--new-bookmark <name>`            | Creates a bookmark.                           |
+| `--save-bookmark <name>`           | Saves the current page as a bookmark.         |
+| `--open-bookmark <name>`           | Opens a bookmark.                             |
+| `--delete-bookmark <name>`         | Deletes a bookmark.                           |
+
+### Examples
+
+Open a URL:
+
+`lewweb --open https://example.com`
+
+Search DuckDuckGo:
+
+`lewweb --search "Qt 6 documentation"`
+
+Open YouTube search:
+
+`lewweb --youtube "Baby V.O.X"`
+
+Open a specific tab:
+
+`lewweb --tab 2`
+
+Set zoom:
+
+`lewweb --zoom 125`
+
+Load a configuration:
+
+`lewweb --config /path/to/lewweb.json`
+
+Download a file:
+
+`lewweb --download-file https://example.com/file.zip`
+
+Download a Pinterest image through `lew-dlp`:
+
+`lewweb --download-pinterest-image <url>`
+
+
+
 ---
 
 # Third-Party Software & Legal Notices
