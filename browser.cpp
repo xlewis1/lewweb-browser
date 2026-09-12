@@ -24,6 +24,7 @@
 #include <QProcess>
 #include <QColor>
 #include <QPalette>
+#include <QTimer>
 
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFullScreenRequest>
@@ -60,6 +61,12 @@ struct BrowserConfig
 
     int zoom = 100;
 };
+
+
+static BrowserConfig defaultConfig()
+{
+    return BrowserConfig{};
+}
 
 
 static QString profilePath()
@@ -187,6 +194,37 @@ static QString bookmarkUrl(
 }
 
 
+static void listBookmarks()
+{
+    QJsonObject bookmarks =
+        loadBookmarks();
+
+    qInfo().noquote()
+        << "BOOKMARKS";
+
+    if (bookmarks.isEmpty())
+    {
+        qInfo().noquote()
+            << "    No bookmarks.";
+        return;
+    }
+
+    for (
+        auto it = bookmarks.begin();
+        it != bookmarks.end();
+        ++it
+    )
+    {
+        qInfo().noquote()
+            << QString("    %1 -> %2")
+                .arg(
+                    it.key(),
+                    it.value().toString()
+                );
+    }
+}
+
+
 static QString referencePath()
 {
     const QString fileName =
@@ -270,7 +308,8 @@ static BrowserConfig loadConfig(
     const QString &path
 )
 {
-    BrowserConfig config;
+    BrowserConfig config =
+        defaultConfig();
 
     QFile file(path);
 
@@ -436,6 +475,81 @@ static BrowserConfig loadConfig(
         config.zoom = 500;
 
     return config;
+}
+
+
+static bool saveConfig(
+    const BrowserConfig &config,
+    const QString &path
+)
+{
+    if (path.trimmed().isEmpty())
+        return false;
+
+    QJsonObject object;
+
+    object["window_border"] =
+        config.windowBorder;
+
+    object["theme"] =
+        config.theme;
+
+    object["browser_colour"] =
+        config.browserColour;
+
+    object["border_colour"] =
+        config.borderColour;
+
+    object["background_colour"] =
+        config.backgroundColour;
+
+    object["text_colour"] =
+        config.textColour;
+
+    object["homepage"] =
+        config.homepage;
+
+    object["search_engine"] =
+        config.searchEngine;
+
+    object["zoom"] =
+        config.zoom;
+
+    QFile file(path);
+
+    if (!file.open(
+        QIODevice::WriteOnly |
+        QIODevice::Truncate
+    ))
+    {
+        qWarning().noquote()
+            << "LewWeb: could not save config:"
+            << path;
+
+        return false;
+    }
+
+    file.write(
+        QJsonDocument(object)
+            .toJson(QJsonDocument::Indented)
+    );
+
+    qInfo().noquote()
+        << "LewWeb: configuration saved to"
+        << path;
+
+    return true;
+}
+
+
+static bool resetConfig(
+    const QString &path
+)
+{
+    return saveConfig(
+        defaultConfig(),
+        path
+    );
 }
 
 
@@ -620,6 +734,7 @@ public:
             "--open",
             "--search",
             "--home",
+            "--show-url",
             "--back",
             "--forward",
             "--reload",
@@ -634,7 +749,9 @@ public:
             "--news",
 
             "--new-tab",
+            "--new-window",
             "--close-tab",
+            "--close",
             "--tab",
             "--next-tab",
             "--previous-tab",
@@ -647,6 +764,7 @@ public:
             "--save-bookmark",
             "--open-bookmark",
             "--delete-bookmark",
+            "--list-bookmarks",
 
             "--fullscreen",
             "--exit-fullscreen",
@@ -654,6 +772,10 @@ public:
             "--zoom-in",
             "--zoom-out",
             "--zoom",
+
+            "--save-config",
+            "--reset-config",
+            "--hard-reset",
 
             "--help",
             "--version",
@@ -718,6 +840,26 @@ public:
         config_ = config;
 
         applyConfig();
+        applyWidgetStyle();
+
+        for (
+            int i = 0;
+            i < tabs_->count();
+            ++i
+        )
+        {
+            auto *view =
+                static_cast<BrowserTab *>(
+                    tabs_->widget(i)
+                );
+
+            if (view)
+            {
+                view->setZoomFactor(
+                    config_.zoom / 100.0
+                );
+            }
+        }
     }
 
 
@@ -774,10 +916,8 @@ public:
                 pendingDownloadDirectory_.clear();
 
                 if (directory.isEmpty())
-                {
                     directory =
                         profile_->downloadPath();
-                }
 
                 QDir dir(directory);
 
@@ -1387,6 +1527,12 @@ public:
     }
 
 
+    void closeBrowser()
+    {
+        close();
+    }
+
+
     void zoomIn()
     {
         if (auto *view = currentTab())
@@ -1460,6 +1606,13 @@ public:
             return view->url().toString();
 
         return {};
+    }
+
+
+    void showUrl()
+    {
+        qInfo().noquote()
+            << currentUrl();
     }
 
 
@@ -1583,6 +1736,69 @@ public:
         runPinterestDownloader(
             url,
             directory
+        );
+    }
+
+
+    void saveCurrentConfig(
+        const QString &path
+    )
+    {
+        saveConfig(
+            config_,
+            path
+        );
+    }
+
+
+    void resetCurrentConfig(
+        const QString &path
+    )
+    {
+        BrowserConfig config =
+            defaultConfig();
+
+        saveConfig(
+            config,
+            path
+        );
+
+        applyConfig(config);
+    }
+
+
+    void hardReset()
+    {
+        qInfo().noquote()
+            << "LewWeb: performing hard reset.";
+
+        close();
+
+        QTimer::singleShot(
+            250,
+            qApp,
+            []()
+            {
+                QDir profile(
+                    profilePath()
+                );
+
+                if (profile.exists())
+                {
+                    if (
+                        !profile.removeRecursively()
+                    )
+                    {
+                        qWarning().noquote()
+                            << "LewWeb: could not completely remove profile.";
+                    }
+                }
+
+                qInfo().noquote()
+                    << "LewWeb: browser data reset.";
+
+                qApp->quit();
+            }
         );
     }
 
@@ -1834,6 +2050,10 @@ private:
         {
             open(QUrl(config_.homepage));
         }
+        else if (action == "--show-url")
+        {
+            showUrl();
+        }
         else if (action == "--back")
         {
             back();
@@ -1857,6 +2077,10 @@ private:
         else if (action == "--close-tab")
         {
             closeCurrentTab();
+        }
+        else if (action == "--close")
+        {
+            closeBrowser();
         }
         else if (action == "--next-tab")
         {
@@ -1958,6 +2182,24 @@ private:
             if (!parts.isEmpty())
                 removeBookmark(parts.first());
         }
+        else if (action == "--list-bookmarks")
+        {
+            listBookmarks();
+        }
+        else if (action == "--save-config")
+        {
+            if (!parts.isEmpty())
+                saveCurrentConfig(parts.first());
+        }
+        else if (action == "--reset-config")
+        {
+            if (!parts.isEmpty())
+                resetCurrentConfig(parts.first());
+        }
+        else if (action == "--hard-reset")
+        {
+            hardReset();
+        }
         else if (action == "--help")
         {
             printHelp();
@@ -2026,10 +2268,13 @@ NAVIGATION
     --open URL
     --search QUERY
     --home
+    --show-url
     --back
     --forward
     --reload
     --stop
+    --close
+    --new-window
 
 SEARCH
     --wikipedia
@@ -2060,10 +2305,17 @@ BOOKMARKS
     --save-bookmark NAME
     --open-bookmark NAME
     --delete-bookmark NAME
+    --list-bookmarks
 
 CONFIGURATION
     --config FILE
         Load browser configuration from a JSON file.
+
+    --save-config FILE
+        Save the current LewWeb configuration.
+
+    --reset-config FILE
+        Reset a configuration file to defaults.
 
     Example:
         lewweb --config ~/Documents/lewweb.json
@@ -2099,6 +2351,9 @@ CONFIGURATION
         zoom
             Default zoom percentage.
 
+    --hard-reset
+        Reset all persistent LewWeb browser data.
+
 BROWSER
     --fullscreen
     --exit-fullscreen
@@ -2133,10 +2388,13 @@ KEYBOARD
 
 EXAMPLES
     lewweb --home
+    lewweb --show-url
     lewweb --search "jupiter" --wikipedia
     lewweb --open "https://github.com"
 
     lewweb --config ~/Documents/lewweb.json
+    lewweb --save-config ~/Documents/lewweb.json
+    lewweb --reset-config ~/Documents/lewweb.json
 
     lewweb --download-file \
         "https://example.com/file.pdf" \
@@ -2153,6 +2411,11 @@ EXAMPLES
     lewweb --open-bookmark github
     lewweb --new-bookmark github https://github.com
     lewweb --delete-bookmark github
+    lewweb --list-bookmarks
+
+    lewweb --new-window
+    lewweb --close
+    lewweb --hard-reset
 
 )";
 }
@@ -2190,7 +2453,9 @@ static bool sendCommand(
 
 static void setupServer(
     QLocalServer &server,
-    BrowserWindow &window
+    BrowserWindow &window,
+    QWebEngineProfile *profile,
+    const BrowserConfig &config
 )
 {
     QLocalServer::removeServer(
@@ -2205,7 +2470,7 @@ static void setupServer(
         &server,
         &QLocalServer::newConnection,
         &window,
-        [&server, &window]()
+        [&server, &window, profile, config]()
         {
             while (
                 server.hasPendingConnections()
@@ -2218,7 +2483,7 @@ static void setupServer(
                     socket,
                     &QLocalSocket::readyRead,
                     socket,
-                    [socket, &window]()
+                    [socket, &window, profile, config]()
                     {
                         QList<QByteArray> commands =
                             socket
@@ -2278,9 +2543,13 @@ static void setupServer(
                             {
                                 window.open(
                                     QUrl(
-                                        "https://duckduckgo.com/"
+                                        config.homepage
                                     )
                                 );
+                            }
+                            else if (action == "show-url")
+                            {
+                                window.showUrl();
                             }
                             else if (action == "back")
                             {
@@ -2307,16 +2576,34 @@ static void setupServer(
                                 if (url.isEmpty())
                                 {
                                     url =
-                                        "https://duckduckgo.com/";
+                                        config.homepage;
                                 }
 
                                 window.addTab(
                                     QUrl(url)
                                 );
                             }
+                            else if (action == "new-window")
+                            {
+                                BrowserWindow *newWindow =
+                                    new BrowserWindow(
+                                        profile,
+                                        config
+                                    );
+
+                                newWindow->setAttribute(
+                                    Qt::WA_DeleteOnClose
+                                );
+
+                                newWindow->show();
+                            }
                             else if (action == "close-tab")
                             {
                                 window.closeCurrentTab();
+                            }
+                            else if (action == "close")
+                            {
+                                window.closeBrowser();
                             }
                             else if (action == "next-tab")
                             {
@@ -2426,6 +2713,10 @@ static void setupServer(
                                         .toString()
                                 );
                             }
+                            else if (action == "list-bookmarks")
+                            {
+                                listBookmarks();
+                            }
                             else if (action == "config")
                             {
                                 QString path =
@@ -2434,13 +2725,31 @@ static void setupServer(
 
                                 if (!path.isEmpty())
                                 {
-                                    BrowserConfig config =
+                                    BrowserConfig newConfig =
                                         loadConfig(path);
 
                                     window.applyConfig(
-                                        config
+                                        newConfig
                                     );
                                 }
+                            }
+                            else if (action == "save-config")
+                            {
+                                window.saveCurrentConfig(
+                                    object["path"]
+                                        .toString()
+                                );
+                            }
+                            else if (action == "reset-config")
+                            {
+                                window.resetCurrentConfig(
+                                    object["path"]
+                                        .toString()
+                                );
+                            }
+                            else if (action == "hard-reset")
+                            {
+                                window.hardReset();
                             }
                         }
 
@@ -2571,6 +2880,11 @@ int main(
         "Open configured homepage."
     );
 
+    QCommandLineOption showUrlOption(
+        "show-url",
+        "Print the current page URL."
+    );
+
     QCommandLineOption backOption(
         "back",
         "Go back."
@@ -2596,9 +2910,19 @@ int main(
         "Open a new tab."
     );
 
+    QCommandLineOption newWindowOption(
+        "new-window",
+        "Open another LewWeb window."
+    );
+
     QCommandLineOption closeTabOption(
         "close-tab",
         "Close current tab."
+    );
+
+    QCommandLineOption closeOption(
+        "close",
+        "Close LewWeb."
     );
 
     QCommandLineOption tabOption(
@@ -2690,6 +3014,28 @@ int main(
         "name"
     );
 
+    QCommandLineOption listBookmarksOption(
+        "list-bookmarks",
+        "List bookmarks."
+    );
+
+    QCommandLineOption saveConfigOption(
+        "save-config",
+        "Save the current browser configuration.",
+        "file"
+    );
+
+    QCommandLineOption resetConfigOption(
+        "reset-config",
+        "Reset a configuration file to defaults.",
+        "file"
+    );
+
+    QCommandLineOption hardResetOption(
+        "hard-reset",
+        "Reset all persistent LewWeb browser data."
+    );
+
 
     parser.addOption(quietOption);
     parser.addOption(configOption);
@@ -2706,6 +3052,7 @@ int main(
     parser.addOption(newsOption);
 
     parser.addOption(homeOption);
+    parser.addOption(showUrlOption);
 
     parser.addOption(backOption);
     parser.addOption(forwardOption);
@@ -2713,7 +3060,9 @@ int main(
     parser.addOption(stopOption);
 
     parser.addOption(newTabOption);
+    parser.addOption(newWindowOption);
     parser.addOption(closeTabOption);
+    parser.addOption(closeOption);
     parser.addOption(tabOption);
     parser.addOption(nextTabOption);
     parser.addOption(previousTabOption);
@@ -2733,6 +3082,11 @@ int main(
     parser.addOption(saveBookmarkOption);
     parser.addOption(openBookmarkOption);
     parser.addOption(deleteBookmarkOption);
+    parser.addOption(listBookmarksOption);
+
+    parser.addOption(saveConfigOption);
+    parser.addOption(resetConfigOption);
+    parser.addOption(hardResetOption);
 
 
     parser.process(app);
@@ -2750,12 +3104,15 @@ int main(
         parser.isSet(openOption) ||
         parser.isSet(searchOption) ||
         parser.isSet(homeOption) ||
+        parser.isSet(showUrlOption) ||
         parser.isSet(backOption) ||
         parser.isSet(forwardOption) ||
         parser.isSet(reloadOption) ||
         parser.isSet(stopOption) ||
         parser.isSet(newTabOption) ||
+        parser.isSet(newWindowOption) ||
         parser.isSet(closeTabOption) ||
+        parser.isSet(closeOption) ||
         parser.isSet(tabOption) ||
         parser.isSet(nextTabOption) ||
         parser.isSet(previousTabOption) ||
@@ -2771,7 +3128,11 @@ int main(
         parser.isSet(newBookmarkOption) ||
         parser.isSet(saveBookmarkOption) ||
         parser.isSet(openBookmarkOption) ||
-        parser.isSet(deleteBookmarkOption);
+        parser.isSet(deleteBookmarkOption) ||
+        parser.isSet(listBookmarksOption) ||
+        parser.isSet(saveConfigOption) ||
+        parser.isSet(resetConfigOption) ||
+        parser.isSet(hardResetOption);
 
 
     if (hasAction)
@@ -2818,6 +3179,10 @@ int main(
         {
             command["action"] = "home";
         }
+        else if (parser.isSet(showUrlOption))
+        {
+            command["action"] = "show-url";
+        }
         else if (parser.isSet(backOption))
         {
             command["action"] = "back";
@@ -2838,9 +3203,17 @@ int main(
         {
             command["action"] = "new-tab";
         }
+        else if (parser.isSet(newWindowOption))
+        {
+            command["action"] = "new-window";
+        }
         else if (parser.isSet(closeTabOption))
         {
             command["action"] = "close-tab";
+        }
+        else if (parser.isSet(closeOption))
+        {
+            command["action"] = "close";
         }
         else if (parser.isSet(nextTabOption))
         {
@@ -2955,6 +3328,30 @@ int main(
             command["name"] =
                 parser.value(deleteBookmarkOption);
         }
+        else if (parser.isSet(listBookmarksOption))
+        {
+            command["action"] = "list-bookmarks";
+        }
+        else if (parser.isSet(saveConfigOption))
+        {
+            command["action"] = "save-config";
+            command["path"] =
+                QFileInfo(
+                    parser.value(saveConfigOption)
+                ).absoluteFilePath();
+        }
+        else if (parser.isSet(resetConfigOption))
+        {
+            command["action"] = "reset-config";
+            command["path"] =
+                QFileInfo(
+                    parser.value(resetConfigOption)
+                ).absoluteFilePath();
+        }
+        else if (parser.isSet(hardResetOption))
+        {
+            command["action"] = "hard-reset";
+        }
 
 
         QByteArray payload =
@@ -3018,7 +3415,9 @@ int main(
 
     setupServer(
         server,
-        window
+        window,
+        profile,
+        config
     );
 
 
@@ -3062,6 +3461,49 @@ int main(
         window.open(
             QUrl(config.homepage)
         );
+    }
+    else if (parser.isSet(newWindowOption))
+    {
+        BrowserWindow *newWindow =
+            new BrowserWindow(
+                profile,
+                config
+            );
+
+        newWindow->setAttribute(
+            Qt::WA_DeleteOnClose
+        );
+
+        newWindow->show();
+    }
+    else if (parser.isSet(saveConfigOption))
+    {
+        saveConfig(
+            config,
+            QFileInfo(
+                parser.value(saveConfigOption)
+            ).absoluteFilePath()
+        );
+    }
+    else if (parser.isSet(resetConfigOption))
+    {
+        BrowserConfig reset =
+            defaultConfig();
+
+        saveConfig(
+            reset,
+            QFileInfo(
+                parser.value(resetConfigOption)
+            ).absoluteFilePath()
+        );
+    }
+    else if (parser.isSet(listBookmarksOption))
+    {
+        listBookmarks();
+    }
+    else if (parser.isSet(hardResetOption))
+    {
+        window.hardReset();
     }
 
 
