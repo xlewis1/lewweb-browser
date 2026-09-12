@@ -192,6 +192,8 @@ The author of LewWeb is not responsible for the content, availability, security,
 Third-party software included or used by LewWeb remains subject to its own respective licenses and terms.
 
 ---
+Copyright © 2026 Lewis Overall (xlewis1)
+LewWeb is licensed under the Apache License 2.0.
 
 **LewWeb 1.0.0**
 
