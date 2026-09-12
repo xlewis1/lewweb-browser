@@ -166,6 +166,14 @@ LewWeb is designed to be controlled from the command line. The browser provides 
 | `--save-bookmark <name>`           | Saves the current page as a bookmark.         |
 | `--open-bookmark <name>`           | Opens a bookmark.                             |
 | `--delete-bookmark <name>`         | Deletes a bookmark.                           |
+| `--list-bookmarks`                 | List bookmarks.                               |
+| `--hard-reset`                     | Reset all persistent LewWeb browser data.     |
+| `--save-config <File>`             | Save the current browser configuration.       |
+| ` --reset-config <File>`           | Reset a configuration file to defaults.       |
+| ` --show-url `                     | Print the current page URL.                   |
+
+
+
 
 ### Examples
 
