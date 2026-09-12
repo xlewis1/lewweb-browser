@@ -89,6 +89,8 @@ LewWeb requires:
 * Qt 6
 * QtWebEngine
 
+LewWeb can be compiled directly using g++ or clang++. A build system such as CMake may also be used, but is not required.
+
 Clone the repository and build it using the included build system.
 
 The resulting executable can then be run directly or installed somewhere on your `PATH`.
@@ -151,8 +153,6 @@ Qt WebEngine incorporates **Chromium**, meaning distributions of Qt WebEngine ar
 
 For licensing information:
 
-[Qt WebEngine Licensing](https://doc.qt.io/qt-6/qtwebengine-licensing.html?utm_source=chatgpt.com)
-
 ## Chromium
 
 LewWeb uses Chromium through Qt WebEngine.
@@ -164,8 +164,6 @@ Chromium contains software distributed under multiple open-source licenses, incl
 LewWeb does not claim ownership of Chromium or any of its third-party components.
 
 For Chromium licensing and third-party information:
-
-[Chromium Open Source Documentation](https://www.chromium.org/chromium-projects/?utm_source=chatgpt.com)
 
 ## Third-Party Components
 
