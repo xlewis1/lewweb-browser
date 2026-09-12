@@ -186,7 +186,7 @@ Search DuckDuckGo:
 
 Open YouTube search:
 
-`lewweb --youtube "Baby V.O.X"`
+`lewweb --youtube "C programming language."`
 
 Open a specific tab:
 
