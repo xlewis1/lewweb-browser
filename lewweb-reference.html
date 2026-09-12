@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LewWeb — Commands & Controls</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0a0a0a;
+            color: #d4d4d4;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 60px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .tagline {
+            color: #66bb6a;
+            font-size: 14px;
+            margin-top: 16px;
+            font-style: italic;
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #222;
+        }
+
+        h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #d4d4d4;
+            margin-top: 28px;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .divider {
+            height: 1px;
+            background-color: #222;
+            margin: 40px 0;
+        }
+
+        .command-block {
+            background-color: #111;
+            border-left: 2px solid #66bb6a;
+            padding: 12px 16px;
+            margin: 14px 0;
+            font-family: 'Courier New', 'Courier', monospace;
+            font-size: 13px;
+            color: #88dd88;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+
+        .command-block code {
+            color: #88dd88;
+        }
+
+        .command-group {
+            margin: 24px 0;
+        }
+
+        .command-item {
+            margin: 16px 0;
+            padding-left: 20px;
+        }
+
+        .command-item p:first-child {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .command-item .cmd {
+            font-family: 'Courier New', 'Courier', monospace;
+            color: #88dd88;
+            font-size: 13px;
+            display: block;
+            background-color: #111;
+            padding: 8px 12px;
+            border-radius: 3px;
+            margin-bottom: 8px;
+            border-left: 2px solid #66bb6a;
+        }
+
+        .command-item .description {
+            color: #a0a0a0;
+            font-size: 13px;
+            margin: 8px 0;
+        }
+
+        .key-box {
+            display: inline-block;
+            background-color: #1a1a1a;
+            border: 1px solid #444;
+            padding: 6px 10px;
+            margin: 2px 4px 2px 0;
+            font-family: 'Courier New', 'Courier', monospace;
+            font-size: 12px;
+            color: #88dd88;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+
+        tr {
+            border-bottom: 1px solid #222;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 0;
+            color: #ffffff;
+            font-weight: 600;
+            border-bottom: 2px solid #333;
+        }
+
+        td {
+            padding: 10px 16px;
+            vertical-align: top;
+        }
+
+        td:first-child {
+            padding-left: 0;
+        }
+
+        td:last-child {
+            padding-right: 0;
+        }
+
+        .key-col {
+            width: 200px;
+            font-family: 'Courier New', 'Courier', monospace;
+            color: #88dd88;
+            font-weight: 500;
+        }
+
+        .description-col {
+            color: #a0a0a0;
+        }
+
+        .info-block {
+            background-color: #111;
+            border-left: 2px solid #20b2aa;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 3px;
+        }
+
+        .info-block p {
+            color: #b0b0b0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .cheatsheet {
+            background-color: #0f0f0f;
+            border: 1px solid #333;
+            padding: 24px;
+            margin: 40px 0;
+            border-radius: 4px;
+        }
+
+        .cheatsheet h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+
+        .cheatsheet-section {
+            margin-bottom: 28px;
+        }
+
+        .cheatsheet-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .cheatsheet-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .cheatsheet-item {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-family: 'Courier New', 'Courier', monospace;
+            color: #a0a0a0;
+        }
+
+        .cheatsheet-key {
+            color: #88dd88;
+            font-weight: 500;
+            min-width: 180px;
+            flex-shrink: 0;
+        }
+
+        .cheatsheet-desc {
+            color: #888;
+            margin-left: 16px;
+        }
+
+        .closing-statement {
+            background-color: #111;
+            border-left: 2px solid #66bb6a;
+            padding: 20px;
+            margin: 50px 0 0 0;
+            border-radius: 3px;
+            font-size: 14px;
+            color: #b0b0b0;
+            line-height: 1.7;
+            font-style: italic;
+        }
+
+        .version {
+            color: #666;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        footer {
+            text-align: center;
+            color: #555;
+            font-size: 12px;
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid #222;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 16px;
+                font-size: 14px;
+            }
+
+            .container {
+                max-width: 100%;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            h2 {
+                font-size: 16px;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            td {
+                padding: 8px 12px;
+            }
+
+            .key-col {
+                width: auto;
+            }
+
+            .cheatsheet-item {
+                flex-wrap: wrap;
+            }
+
+            .cheatsheet-desc {
+                margin-left: 0;
+                margin-top: 4px;
+                flex-basis: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LewWeb — Commands & Controls</h1>
+            <p class="subtitle">Quick-Reference Manual v1.0.0</p>
+            <p class="tagline">A deliberately minimal, keyboard-driven browser experiment</p>
+        </header>
+
+        <section>
+            <h2>Overview</h2>
+            <div class="info-block">
+                <p><strong>LewWeb</strong> is a CLI + keyboard-driven experimental browser built with C++, Qt6, QtWebEngine, and Chromium. It deliberately rejects conventional browser UI. There is no toolbar, no address bar, no visible tab strip. All interaction is keyboard-driven or command-based.</p>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section>
+            <h2>Commands</h2>
+
+            <h3>Basic</h3>
+            <div class="command-group">
+                <div class="command-item">
+                    <p>Launch LewWeb</p>
+                    <span class="cmd">lewweb</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Show help</p>
+                    <span class="cmd">lewweb --help</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Show extended Qt options</p>
+                    <span class="cmd">lewweb --help-all</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Show version</p>
+                    <span class="cmd">lewweb --version</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Suppress startup logging</p>
+                    <span class="cmd">lewweb --quiet</span>
+                </div>
+            </div>
+
+            <h3>Opening and Searching</h3>
+            <div class="command-group">
+                <div class="command-item">
+                    <p>Open LewWeb home page</p>
+                    <span class="cmd">lewweb --home</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Open a URL</p>
+                    <span class="cmd">lewweb --open https://example.com</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Search DuckDuckGo (default)</p>
+                    <span class="cmd">lewweb --search "query"</span>
+                </div>
+
+                <div class="command-item">
+                    <p>Search with provider</p>
+                    <div class="description">Use one of the following flags with <span style="font-family: monospace; color: #88dd88;">--search</span>:</div>
+                    <div style="margin: 12px 0; padding-left: 20px;">
+                        <div style="margin-bottom: 8px;"><span class="key-box">--wikipedia</span> Wikipedia</div>
+                        <div style="margin-bottom: 8px;"><span class="key-box">--github</span> GitHub</div>
+                        <div style="margin-bottom: 8px;"><span class="key-box">--youtube</span> YouTube</div>
+                        <div style="margin-bottom: 8px;"><span class="key-box">--reddit</span> Reddit</div>
+                        <div style="margin-bottom: 8px;"><span class="key-box">--google</span> Google</div>
+                        <div style="margin-bottom: 8px;"><span class="key-box">--images</span> Image search</div>
+                        <div><span class="key-box">--news</span> News search</div>
+                    </div>
+                    <span class="cmd">lewweb --search "Jupiter" --wikipedia</span>
+                </div>
+            </div>
+
+            <h3>Navigation</h3>
+            <div class="command-group">
+                <div class="command-item">
+                    <span class="cmd">lewweb --back</span>
+                    <p class="description">Go back</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --forward</span>
+                    <p class="description">Go forward</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --reload</span>
+                    <p class="description">Reload current page</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --stop</span>
+                    <p class="description">Stop loading</p>
+                </div>
+            </div>
+
+            <h3>Tabs</h3>
+            <div class="info-block">
+                <p>LewWeb deliberately hides the tab strip. Tabs still exist internally and are fully controlled via commands and keyboard shortcuts.</p>
+            </div>
+            <div class="command-group">
+                <div class="command-item">
+                    <span class="cmd">lewweb --new-tab</span>
+                    <p class="description">Create new tab</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --close-tab</span>
+                    <p class="description">Close current tab</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --tab N</span>
+                    <p class="description">Switch to tab N (1-indexed)</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --next-tab</span>
+                    <p class="description">Switch to next tab</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --previous-tab</span>
+                    <p class="description">Switch to previous tab</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --list-tabs</span>
+                    <p class="description">List all open tabs</p>
+                </div>
+            </div>
+
+            <h3>Bookmarks</h3>
+            <div class="info-block">
+                <p>Bookmarks are persistent and stored locally. Names can contain spaces.</p>
+            </div>
+            <div class="command-group">
+                <div class="command-item">
+                    <span class="cmd">lewweb --new-bookmark "name" https://example.com</span>
+                    <p class="description">Create named bookmark</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --save-bookmark "name"</span>
+                    <p class="description">Save current page under name</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --open-bookmark "name"</span>
+                    <p class="description">Open saved bookmark</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --delete-bookmark "name"</span>
+                    <p class="description">Delete bookmark</p>
+                </div>
+            </div>
+
+            <h3>Zoom and Display</h3>
+            <div class="command-group">
+                <div class="command-item">
+                    <span class="cmd">lewweb --zoom-in</span>
+                    <p class="description">Increase zoom level</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --zoom-out</span>
+                    <p class="description">Decrease zoom level</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --zoom 150</span>
+                    <p class="description">Set zoom to percentage (e.g., 150 = 150%)</p>
+                </div>
+                <div class="command-item">
+                    <span class="cmd">lewweb --fullscreen</span>
+                    <p class="description">Toggle fullscreen mode</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section>
+            <h2>Browser Window Controls</h2>
+
+            <div class="info-block">
+                <p>There is no conventional address bar or toolbar. The browser window is entirely keyboard-driven. Press <span style="font-family: monospace; color: #88dd88;">o</span> to access the in-window command interface.</p>
+            </div>
+
+            <h3>Command Interface</h3>
+            <div class="command-group">
+                <div class="command-item">
+                    <p>Open command interface</p>
+                    <span class="key-box">o</span>
+                    <p class="description" style="margin-top: 8px;">The command interface accepts the same command vocabulary as the CLI. You can issue commands without leaving LewWeb.</p>
+                    <div class="command-block" style="margin-top: 12px;">o<br>--search "Jupiter" --wikipedia<br>Enter</div>
+                </div>
+            </div>
+
+            <h3>Page Movement (Vim-style)</h3>
+            <div class="info-block">
+                <p><strong>Note:</strong> LewWeb intentionally uses <span style="font-family: monospace; color: #88dd88;">j</span> for up and <span style="font-family: monospace; color: #88dd88;">k</span> for down. This is deliberate and differs from conventional Vim bindings.</p>
+            </div>
+            <table>
+                <tr>
+                    <th>Key</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td class="key-col">h</td>
+                    <td class="description-col">Scroll left</td>
+                </tr>
+                <tr>
+                    <td class="key-col">l</td>
+                    <td class="description-col">Scroll right</td>
+                </tr>
+                <tr>
+                    <td class="key-col">j</td>
+                    <td class="description-col">Scroll up</td>
+                </tr>
+                <tr>
+                    <td class="key-col">k</td>
+                    <td class="description-col">Scroll down</td>
+                </tr>
+            </table>
+
+            <h3>Keyboard Shortcuts</h3>
+
+            <div style="margin-top: 28px;">
+                <div class="cheatsheet-label">Tabs</div>
+                <table>
+                    <tr>
+                        <td class="key-col">Cmd/Ctrl + T</td>
+                        <td class="description-col">New tab</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Cmd/Ctrl + W</td>
+                        <td class="description-col">Close tab</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Cmd/Ctrl + Tab</td>
+                        <td class="description-col">Next tab</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Cmd/Ctrl + Shift + Tab</td>
+                        <td class="description-col">Previous tab</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div style="margin-top: 28px;">
+                <div class="cheatsheet-label">Navigation</div>
+                <table>
+                    <tr>
+                        <td class="key-col">Alt + ←</td>
+                        <td class="description-col">Back</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Alt + →</td>
+                        <td class="description-col">Forward</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Cmd/Ctrl + R</td>
+                        <td class="description-col">Reload</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div style="margin-top: 28px;">
+                <div class="cheatsheet-label">Display</div>
+                <table>
+                    <tr>
+                        <td class="key-col">F11</td>
+                        <td class="description-col">Toggle fullscreen</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">+</td>
+                        <td class="description-col">Zoom in</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">−</td>
+                        <td class="description-col">Zoom out</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div style="margin-top: 28px;">
+                <div class="cheatsheet-label">Browser Controls</div>
+                <table>
+                    <tr>
+                        <td class="key-col">o</td>
+                        <td class="description-col">Open command interface</td>
+                    </tr>
+                    <tr>
+                        <td class="key-col">Esc</td>
+                        <td class="description-col">Stop loading / exit fullscreen</td>
+                    </tr>
+                </table>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section>
+            <h2>Quick Reference</h2>
+
+            <div class="cheatsheet">
+                <h3 style="margin-top: 0;">Keyboard Shortcuts</h3>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">o</span>
+                        <span class="cheatsheet-desc">Command interface</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">h / j / k / l</span>
+                        <span class="cheatsheet-desc">Page movement (left / up / down / right)</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Cmd/Ctrl + T</span>
+                        <span class="cheatsheet-desc">New tab</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Cmd/Ctrl + W</span>
+                        <span class="cheatsheet-desc">Close tab</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Cmd/Ctrl + Tab</span>
+                        <span class="cheatsheet-desc">Next tab</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Cmd/Ctrl + Shift + Tab</span>
+                        <span class="cheatsheet-desc">Previous tab</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Cmd/Ctrl + R</span>
+                        <span class="cheatsheet-desc">Reload</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Alt + ← / →</span>
+                        <span class="cheatsheet-desc">Back / Forward</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">F11</span>
+                        <span class="cheatsheet-desc">Fullscreen</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">+ / −</span>
+                        <span class="cheatsheet-desc">Zoom in / out</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">Esc</span>
+                        <span class="cheatsheet-desc">Stop / exit fullscreen</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cheatsheet">
+                <h3 style="margin-top: 0;">CLI Commands</h3>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --open URL</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --search "QUERY"</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --search "Q" --wikipedia</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --search "Q" --github</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --new-tab</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --back</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --forward</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --reload</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --list-tabs</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --save-bookmark "NAME"</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --open-bookmark "NAME"</span>
+                    </div>
+                </div>
+
+                <div class="cheatsheet-section">
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --quiet</span>
+                    </div>
+                    <div class="cheatsheet-item">
+                        <span class="cheatsheet-key">lewweb --version</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="closing-statement">
+            LewWeb is a deliberately minimal, keyboard-driven browser experiment built around the idea that a browser doesn't need to behave like a conventional browser.
+        </div>
+
+        <footer>
+            <p>LewWeb v1.0.0 — Reference Manual</p>
+            <p style="color: #444; margin-top: 8px;">Last updated 2026</p>
+        </footer>
+    </div>
+</body>
+</html>
