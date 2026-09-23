@@ -1,31 +1,33 @@
 #include <QApplication>
-#include <QCompleter>
-#include <QCommandLineParser>
+#include <QAction>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHBoxLayout>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QLocalServer>
-#include <QLocalSocket>
-#include <QMainWindow>
-#include <QHBoxLayout>
 #include <QLabel>
-#include <QTabBar>
 #include <QLineEdit>
+#include <QMainWindow>
+#include <QMenu>
 #include <QMessageBox>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QShortcut>
 #include <QStandardPaths>
+#include <QStyle>
+#include <QTabBar>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QUrl>
-#include <QResizeEvent>
-#include <QProcess>
+#include <QSignalBlocker>
 #include <QColor>
-#include <QPalette>
-
+#include <QCloseEvent>
+#include <QVBoxLayout>
 #include <QWebEngineDownloadRequest>
+#include <QWebEngineHistory>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
@@ -35,14 +37,7 @@
 #include <functional>
 #include <utility>
 
-
 constexpr const char *LEWWEB_VERSION = "1.0.0";
-constexpr const char *SERVER_NAME = "lewweb-browser";
-
-
-static void printHelp();
-static void printVersion();
-
 
 struct BrowserConfig
 {
@@ -61,6 +56,16 @@ struct BrowserConfig
     int zoom = 100;
 };
 
+struct HistoryEntry
+{
+    QString title;
+    QString url;
+};
+
+static BrowserConfig defaultConfig()
+{
+    return BrowserConfig{};
+}
 
 static QString profilePath()
 {
@@ -74,8 +79,7 @@ static QString profilePath()
     if (!dir.exists())
         dir.mkpath(".");
 
-    QString path =
-        dir.filePath("profile");
+    QString path = dir.filePath("profile");
 
     QDir profile(path);
 
@@ -85,14 +89,20 @@ static QString profilePath()
     return path;
 }
 
+static QString configPath()
+{
+    return QDir(profilePath()).filePath("lewweb.json");
+}
 
 static QString bookmarksPath()
 {
-    return QDir(profilePath()).filePath(
-        "bookmarks.json"
-    );
+    return QDir(profilePath()).filePath("bookmarks.json");
 }
 
+static QString historyPath()
+{
+    return QDir(profilePath()).filePath("history.json");
+}
 
 static QJsonObject loadBookmarks()
 {
@@ -115,10 +125,7 @@ static QJsonObject loadBookmarks()
     return document.object();
 }
 
-
-static bool saveBookmarks(
-    const QJsonObject &bookmarks
-)
+static bool saveBookmarks(const QJsonObject &bookmarks)
 {
     QFile file(bookmarksPath());
 
@@ -138,7 +145,6 @@ static bool saveBookmarks(
     return true;
 }
 
-
 static bool addBookmark(
     const QString &name,
     const QString &url
@@ -152,136 +158,38 @@ static bool addBookmark(
         return false;
     }
 
-    QJsonObject bookmarks =
-        loadBookmarks();
-
+    QJsonObject bookmarks = loadBookmarks();
     bookmarks[name] = url;
 
     return saveBookmarks(bookmarks);
 }
 
-
-static bool removeBookmark(
-    const QString &name
-)
+static bool removeBookmark(const QString &name)
 {
-    QJsonObject bookmarks =
-        loadBookmarks();
+    QJsonObject bookmarks = loadBookmarks();
 
     if (!bookmarks.contains(name))
         return false;
 
     bookmarks.remove(name);
-
     return saveBookmarks(bookmarks);
 }
 
-
-static QString bookmarkUrl(
-    const QString &name
-)
+static QString bookmarkUrl(const QString &name)
 {
     return loadBookmarks()
         .value(name)
         .toString();
 }
 
-
-static QString referencePath()
+static QList<HistoryEntry> loadHistory()
 {
-    const QString fileName =
-        "lewweb-reference.html";
+    QList<HistoryEntry> history;
 
-    QString path =
-        QDir::current().filePath(fileName);
-
-    if (QFile::exists(path))
-        return path;
-
-    path =
-        QDir(
-            QCoreApplication::applicationDirPath()
-        ).filePath(fileName);
-
-    if (QFile::exists(path))
-        return path;
-
-    path =
-        "/usr/local/share/lewweb/" +
-        fileName;
-
-    if (QFile::exists(path))
-        return path;
-
-    return {};
-}
-
-
-static bool runPinterestDownloader(
-    const QString &url,
-    const QString &directory
-)
-{
-    if (
-        url.trimmed().isEmpty() ||
-        directory.trimmed().isEmpty()
-    )
-    {
-        return false;
-    }
-
-    QDir dir(directory);
-
-    if (!dir.exists())
-    {
-        if (!dir.mkpath("."))
-            return false;
-    }
-
-    QProcess *process =
-        new QProcess(qApp);
-
-    process->setProgram("lew-dlp");
-
-    process->setArguments({
-        url,
-        "-P",
-        directory
-    });
-
-    process->setProcessChannelMode(
-        QProcess::ForwardedChannels
-    );
-
-    QObject::connect(
-        process,
-        &QProcess::finished,
-        process,
-        &QObject::deleteLater
-    );
-
-    process->start();
-
-    return true;
-}
-
-
-static BrowserConfig loadConfig(
-    const QString &path
-)
-{
-    BrowserConfig config;
-
-    QFile file(path);
+    QFile file(historyPath());
 
     if (!file.open(QIODevice::ReadOnly))
-    {
-        qWarning().noquote()
-            << "LewWeb: could not open config:"
-            << path;
-
-        return config;
-    }
+        return history;
 
     QJsonParseError error;
 
@@ -291,49 +199,121 @@ static BrowserConfig loadConfig(
             &error
         );
 
-    if (error.error != QJsonParseError::NoError)
+    if (
+        error.error !=
+        QJsonParseError::NoError
+    )
     {
-        qWarning().noquote()
-            << "LewWeb: invalid config:"
-            << error.errorString();
+        return history;
+    }
 
+    if (!document.isArray())
+        return history;
+
+    for (const QJsonValue &value : document.array())
+    {
+        if (!value.isObject())
+            continue;
+
+        QJsonObject object = value.toObject();
+
+        QString url =
+            object["url"].toString();
+
+        if (url.trimmed().isEmpty())
+            continue;
+
+        HistoryEntry entry;
+        entry.title = object["title"].toString();
+        entry.url = url;
+
+        history.append(entry);
+    }
+
+    return history;
+}
+
+static bool saveHistory(
+    const QList<HistoryEntry> &history
+)
+{
+    QJsonArray array;
+
+    for (const HistoryEntry &entry : history)
+    {
+        QJsonObject object;
+        object["title"] = entry.title;
+        object["url"] = entry.url;
+        array.append(object);
+    }
+
+    QFile file(historyPath());
+
+    if (!file.open(
+        QIODevice::WriteOnly |
+        QIODevice::Truncate
+    ))
+    {
+        return false;
+    }
+
+    file.write(
+        QJsonDocument(array)
+            .toJson(QJsonDocument::Indented)
+    );
+
+    return true;
+}
+
+static BrowserConfig loadConfig(const QString &path)
+{
+    BrowserConfig config = defaultConfig();
+
+    QFile file(path);
+
+    if (!file.open(QIODevice::ReadOnly))
+        return config;
+
+    QJsonParseError error;
+
+    QJsonDocument document =
+        QJsonDocument::fromJson(
+            file.readAll(),
+            &error
+        );
+
+    if (
+        error.error !=
+        QJsonParseError::NoError ||
+        !document.isObject()
+    )
+    {
         return config;
     }
 
-    if (!document.isObject())
-    {
-        qWarning().noquote()
-            << "LewWeb: config must contain a JSON object.";
-
-        return config;
-    }
-
-    QJsonObject object =
-        document.object();
+    QJsonObject object = document.object();
 
     if (object.contains("window_border"))
         config.windowBorder =
-            object["window_border"].toString(
-                config.windowBorder
-            ).toLower();
+            object["window_border"]
+                .toString(config.windowBorder)
+                .toLower();
 
     if (object.contains("theme"))
         config.theme =
-            object["theme"].toString(
-                config.theme
-            ).toLower();
+            object["theme"]
+                .toString(config.theme)
+                .toLower();
 
     if (object.contains("browser_colour"))
         config.browserColour =
-            object["browser_colour"].toString(
-                config.browserColour
-            );
+            object["browser_colour"]
+                .toString(config.browserColour);
 
     if (object.contains("border_colour"))
         config.borderColour =
-            object["border_colour"].toString(
-                config.borderColour
-            );
+            object["border_colour"]
+                .toString(config.borderColour);
 
     if (object.contains("background_colour"))
         config.backgroundColour =
@@ -345,32 +325,24 @@ static BrowserConfig loadConfig(
 
     if (object.contains("homepage"))
         config.homepage =
-            object["homepage"].toString(
-                config.homepage
-            );
+            object["homepage"]
+                .toString(config.homepage);
 
     if (object.contains("search_engine"))
         config.searchEngine =
-            object["search_engine"].toString(
-                config.searchEngine
-            ).toLower();
+            object["search_engine"]
+                .toString(config.searchEngine)
+                .toLower();
 
     if (object.contains("zoom"))
         config.zoom =
-            object["zoom"].toInt(
-                config.zoom
-            );
+            object["zoom"].toInt(config.zoom);
 
     if (
         config.windowBorder != "default" &&
         config.windowBorder != "borderless"
     )
     {
-        qWarning().noquote()
-            << "LewWeb: invalid window_border:"
-            << config.windowBorder
-            << "(using default)";
-
         config.windowBorder = "default";
     }
 
@@ -379,41 +351,20 @@ static BrowserConfig loadConfig(
         config.theme != "dark"
     )
     {
-        qWarning().noquote()
-            << "LewWeb: invalid theme:"
-            << config.theme
-            << "(using light)";
-
         config.theme = "light";
     }
 
     if (!QColor(config.browserColour).isValid())
-    {
-        qWarning().noquote()
-            << "LewWeb: invalid browser_colour:"
-            << config.browserColour;
-
         config.browserColour = "#9b59b6";
-    }
 
     if (!QColor(config.borderColour).isValid())
-    {
-        qWarning().noquote()
-            << "LewWeb: invalid border_colour:"
-            << config.borderColour;
-
         config.borderColour = "#9b59b6";
-    }
 
     if (
         !config.backgroundColour.isEmpty() &&
         !QColor(config.backgroundColour).isValid()
     )
     {
-        qWarning().noquote()
-            << "LewWeb: invalid background_colour:"
-            << config.backgroundColour;
-
         config.backgroundColour.clear();
     }
 
@@ -422,10 +373,6 @@ static BrowserConfig loadConfig(
         !QColor(config.textColour).isValid()
     )
     {
-        qWarning().noquote()
-            << "LewWeb: invalid text_colour:"
-            << config.textColour;
-
         config.textColour.clear();
     }
 
@@ -438,9 +385,71 @@ static BrowserConfig loadConfig(
     return config;
 }
 
+static bool saveConfig(
+    const BrowserConfig &config,
+    const QString &path
+)
+{
+    if (path.trimmed().isEmpty())
+        return false;
+
+    QDir().mkpath(
+        QFileInfo(path).absolutePath()
+    );
+
+    QJsonObject object;
+
+    object["window_border"] = config.windowBorder;
+    object["theme"] = config.theme;
+    object["browser_colour"] = config.browserColour;
+    object["border_colour"] = config.borderColour;
+    object["background_colour"] = config.backgroundColour;
+    object["text_colour"] = config.textColour;
+    object["homepage"] = config.homepage;
+    object["search_engine"] = config.searchEngine;
+    object["zoom"] = config.zoom;
+
+    QFile file(path);
+
+    if (!file.open(
+        QIODevice::WriteOnly |
+        QIODevice::Truncate
+    ))
+    {
+        return false;
+    }
+
+    file.write(
+        QJsonDocument(object)
+            .toJson(QJsonDocument::Indented)
+    );
+
+    return true;
+}
+
+static QString searchUrl(
+    const QString &engine,
+    const QString &query
+)
+{
+    QString encoded =
+        QString::fromUtf8(
+            QUrl::toPercentEncoding(query)
+        );
+
+    if (engine == "google")
+        return "https://www.google.com/search?q=" + encoded;
+
+    if (engine == "bing")
+        return "https://www.bing.com/search?q=" + encoded;
+
+    if (engine == "yahoo")
+        return "https://search.yahoo.com/search?p=" + encoded;
+
+    return "https://duckduckgo.com/?q=" + encoded;
+}
 
 class BrowserWindow;
-
 
 class BrowserPage : public QWebEnginePage
 {
@@ -455,7 +464,6 @@ public:
     {
     }
 
-
 protected:
     QWebEnginePage *createWindow(
         WebWindowType type
@@ -469,11 +477,9 @@ protected:
         return nullptr;
     }
 
-
 private:
     std::function<QWebEnginePage *()> createPage_;
 };
-
 
 class BrowserTab : public QWebEngineView
 {
@@ -494,8 +500,7 @@ public:
             )
         );
 
-        QWebEngineSettings *settings =
-            this->settings();
+        QWebEngineSettings *settings = this->settings();
 
         settings->setAttribute(
             QWebEngineSettings::JavascriptEnabled,
@@ -538,7 +543,6 @@ public:
     }
 };
 
-
 class BrowserWindow : public QMainWindow
 {
 public:
@@ -548,319 +552,191 @@ public:
     )
         : QMainWindow(nullptr),
           profile_(profile),
-          config_(config)
+          config_(config),
+          history_(loadHistory())
     {
         setWindowTitle("LewWeb");
         resize(1280, 800);
 
+        buildInterface();
         applyConfig();
-
-        tabs_ =
-            new QTabWidget(this);
-
-        tabs_->setTabBarAutoHide(false);
-        tabs_->setTabsClosable(false);
-        tabs_->setDocumentMode(true);
-        tabs_->tabBar()->hide();
-
-        setCentralWidget(tabs_);
-
-        progressBar_ =
-            new QProgressBar(this);
-
-        progressBar_->setRange(0, 100);
-        progressBar_->setValue(0);
-        progressBar_->setTextVisible(false);
-        progressBar_->setFixedHeight(3);
-        progressBar_->hide();
-
-        commandPalette_ =
-            new QWidget(this);
-
-        commandPalette_->setObjectName(
-            "commandPalette"
-        );
-
-        QHBoxLayout *commandLayout =
-            new QHBoxLayout(
-                commandPalette_
-            );
-
-        commandLayout->setContentsMargins(
-            10,
-            5,
-            10,
-            5
-        );
-
-        commandLayout->setSpacing(8);
-
-        commandPrompt_ =
-            new QLabel(
-                "lewweb:>$",
-                commandPalette_
-            );
-
-        commandBar_ =
-            new QLineEdit(
-                commandPalette_
-            );
-
-        commandBar_->setFrame(false);
-
-        commandLayout->addWidget(
-            commandPrompt_
-        );
-
-        commandLayout->addWidget(
-            commandBar_
-        );
-
-        QStringList commands = {
-            "--open",
-            "--search",
-            "--home",
-            "--back",
-            "--forward",
-            "--reload",
-            "--stop",
-
-            "--wikipedia",
-            "--github",
-            "--youtube",
-            "--reddit",
-            "--google",
-            "--images",
-            "--news",
-
-            "--new-tab",
-            "--close-tab",
-            "--tab",
-            "--next-tab",
-            "--previous-tab",
-            "--list-tabs",
-
-            "--download-file",
-            "--download-pinterest-image",
-
-            "--new-bookmark",
-            "--save-bookmark",
-            "--open-bookmark",
-            "--delete-bookmark",
-
-            "--fullscreen",
-            "--exit-fullscreen",
-            "--javascript",
-            "--light-mode",
-            "--dark-mode",
-            "--zoom-in",
-            "--zoom-out",
-            "--zoom",
-
-            "--help",
-            "--version",
-            "--config",
-            "--quiet"
-        };
-
-        QCompleter *completer =
-            new QCompleter(
-                commands,
-                commandBar_
-            );
-
-        completer->setCaseSensitivity(
-            Qt::CaseInsensitive
-        );
-
-        completer->setCompletionMode(
-            QCompleter::PopupCompletion
-        );
-
-        commandBar_->setCompleter(
-            completer
-        );
-
-        commandPalette_->hide();
-
-        connect(
-            commandBar_,
-            &QLineEdit::returnPressed,
-            this,
-            [this]()
-            {
-                QString command =
-                    commandBar_->text();
-
-                commandBar_->clear();
-                commandPalette_->hide();
-
-                if (!command.trimmed().isEmpty())
-                    executeCommand(command);
-
-                currentTabFocus();
-            }
-        );
-
-        applyWidgetStyle();
+        setupShortcuts();
+        setupDownloads();
 
         addTab(
             QUrl(config_.homepage)
         );
-
-        setupShortcuts();
-        setupDownloads();
     }
 
-
-    void applyConfig(
-        const BrowserConfig &config
-    )
+private:
+    void buildInterface()
     {
-        config_ = config;
+        tabs_ = new QTabWidget(this);
 
-        applyConfig();
-    }
+        tabs_->setDocumentMode(true);
+        tabs_->setTabsClosable(true);
+        tabs_->setMovable(true);
+        tabs_->tabBar()->setExpanding(false);
 
-
-    void resizeEvent(
-        QResizeEvent *event
-    ) override
-    {
-        QMainWindow::resizeEvent(event);
-
-        if (commandPalette_)
-        {
-            commandPalette_->setGeometry(
-                8,
-                height() - 50,
-                width() - 16,
-                42
-            );
-        }
-
-        if (progressBar_)
-        {
-            progressBar_->setGeometry(
-                0,
-                0,
-                width(),
-                3
-            );
-        }
-    }
-
-
-    void setupDownloads()
-    {
-        profile_->setDownloadPath(
-            QStandardPaths::writableLocation(
-                QStandardPaths::DownloadLocation
-            )
+        connect(
+            tabs_,
+            &QTabWidget::currentChanged,
+            this,
+            [this](int)
+            {
+                updateUrlBar();
+                updateButtons();
+                updateWindowTitle();
+            }
         );
 
         connect(
-            profile_,
-            &QWebEngineProfile::downloadRequested,
+            tabs_,
+            &QTabWidget::tabCloseRequested,
             this,
-            [this](
-                QWebEngineDownloadRequest *download
-            )
+            [this](int index)
             {
-                if (!download)
-                    return;
-
-                QString directory =
-                    pendingDownloadDirectory_;
-
-                pendingDownloadDirectory_.clear();
-
-                if (directory.isEmpty())
-                {
-                    directory =
-                        profile_->downloadPath();
-                }
-
-                QDir dir(directory);
-
-                if (!dir.exists())
-                {
-                    if (!dir.mkpath("."))
-                    {
-                        qWarning()
-                            << "LewWeb: could not create download directory:"
-                            << directory;
-
-                        download->cancel();
-                        return;
-                    }
-                }
-
-                QString fileName =
-                    download->downloadFileName();
-
-                if (fileName.isEmpty())
-                    fileName =
-                        download->suggestedFileName();
-
-                if (fileName.isEmpty())
-                    fileName = "download";
-
-                download->setDownloadDirectory(
-                    directory
-                );
-
-                download->setDownloadFileName(
-                    fileName
-                );
-
-                connect(
-                    download,
-                    &QWebEngineDownloadRequest::stateChanged,
-                    this,
-                    [download](
-                        QWebEngineDownloadRequest::DownloadState state
-                    )
-                    {
-                        if (
-                            state ==
-                            QWebEngineDownloadRequest::DownloadCompleted
-                        )
-                        {
-                            qInfo().noquote()
-                                << "LewWeb: downloaded"
-                                << download->downloadFileName();
-                        }
-                        else if (
-                            state ==
-                            QWebEngineDownloadRequest::DownloadInterrupted
-                        )
-                        {
-                            qWarning().noquote()
-                                << "LewWeb: download interrupted:"
-                                << download->interruptReasonString();
-                        }
-                    }
-                );
-
-                download->accept();
-
-                qInfo().noquote()
-                    << "LewWeb: downloading"
-                    << download->url().toString()
-                    << "->"
-                    << QDir(directory)
-                        .filePath(fileName);
+                closeTab(index);
             }
         );
-    }
 
+        QWidget *toolbar = new QWidget(this);
+        toolbar->setObjectName("toolbar");
 
-    void setupShortcuts()
-    {
-        shortcut(
-            "Ctrl+T",
-            [this]()
+        QHBoxLayout *layout =
+            new QHBoxLayout(toolbar);
+
+        layout->setContentsMargins(
+            8, 7, 8, 7
+        );
+
+        layout->setSpacing(5);
+
+        backButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_ArrowBack
+            ),
+            "Back"
+        );
+
+        forwardButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_ArrowForward
+            ),
+            "Forward"
+        );
+
+        reloadButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_BrowserReload
+            ),
+            "Reload"
+        );
+
+        homeButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_DirHomeIcon
+            ),
+            "Home"
+        );
+
+        backButton_->setObjectName("navButton");
+        forwardButton_->setObjectName("navButton");
+        reloadButton_->setObjectName("navButton");
+        homeButton_->setObjectName("navButton");
+
+        connect(
+            backButton_,
+            &QToolButton::clicked,
+            this,
+            [this] { back(); }
+        );
+
+        connect(
+            forwardButton_,
+            &QToolButton::clicked,
+            this,
+            [this] { forward(); }
+        );
+
+        connect(
+            reloadButton_,
+            &QToolButton::clicked,
+            this,
+            [this]
+            {
+                if (auto *view = currentTab())
+                {
+                    if (view->page()->isLoading())
+                        view->stop();
+                    else
+                        view->reload();
+                }
+            }
+        );
+
+        connect(
+            homeButton_,
+            &QToolButton::clicked,
+            this,
+            [this]
+            {
+                openUrl(
+                    QUrl(config_.homepage)
+                );
+            }
+        );
+
+        urlBar_ = new QLineEdit(this);
+        urlBar_->setObjectName("urlBar");
+        urlBar_->setPlaceholderText(
+            "Search or enter website address"
+        );
+        urlBar_->setClearButtonEnabled(true);
+
+        connect(
+            urlBar_,
+            &QLineEdit::returnPressed,
+            this,
+            [this]
+            {
+                navigateFromUrlBar();
+            }
+        );
+
+        starButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_DialogSaveButton
+            ),
+            "Bookmark this page"
+        );
+
+        starButton_->setObjectName("navButton");
+
+        connect(
+            starButton_,
+            &QToolButton::clicked,
+            this,
+            [this]
+            {
+                saveCurrentBookmark();
+            }
+        );
+
+        newTabButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_FileDialogNewFolder
+            ),
+            "New Tab"
+        );
+
+        newTabButton_->setObjectName("navButton");
+
+        connect(
+            newTabButton_,
+            &QToolButton::clicked,
+            this,
+            [this]
             {
                 addTab(
                     QUrl(config_.homepage)
@@ -868,17 +744,93 @@ public:
             }
         );
 
+        menuButton_ = makeButton(
+            QApplication::style()->standardIcon(
+                QStyle::SP_TitleBarMenuButton
+            ),
+            "LewWeb menu"
+        );
+
+        menuButton_->setObjectName("navButton");
+
+        connect(
+            menuButton_,
+            &QToolButton::clicked,
+            this,
+            [this]
+            {
+                showMenu();
+            }
+        );
+
+        layout->addWidget(backButton_);
+        layout->addWidget(forwardButton_);
+        layout->addWidget(reloadButton_);
+        layout->addWidget(homeButton_);
+        layout->addWidget(urlBar_, 1);
+        layout->addWidget(starButton_);
+        layout->addWidget(newTabButton_);
+        layout->addWidget(menuButton_);
+
+        progressBar_ = new QProgressBar(this);
+        progressBar_->setRange(0, 100);
+        progressBar_->setValue(0);
+        progressBar_->setTextVisible(false);
+        progressBar_->setFixedHeight(3);
+        progressBar_->hide();
+
+        QWidget *content = new QWidget(this);
+
+        QVBoxLayout *contentLayout =
+            new QVBoxLayout(content);
+
+        contentLayout->setContentsMargins(0, 0, 0, 0);
+        contentLayout->setSpacing(0);
+
+        contentLayout->addWidget(toolbar);
+        contentLayout->addWidget(progressBar_);
+        contentLayout->addWidget(tabs_, 1);
+
+        setCentralWidget(content);
+    }
+
+    QToolButton *makeButton(
+        const QIcon &icon,
+        const QString &toolTip
+    )
+    {
+        QToolButton *button =
+            new QToolButton(this);
+
+        button->setIcon(icon);
+        button->setToolTip(toolTip);
+        button->setAutoRaise(true);
+        button->setIconSize(QSize(18, 18));
+
+        return button;
+    }
+
+    void setupShortcuts()
+    {
+        shortcut(
+            "Ctrl+T",
+            [this]
+            {
+                addTab(QUrl(config_.homepage));
+            }
+        );
+
         shortcut(
             "Meta+T",
-            [this]()
+            [this]
             {
-                openCommandBar();
+                addTab(QUrl(config_.homepage));
             }
         );
 
         shortcut(
             "Ctrl+W",
-            [this]()
+            [this]
             {
                 closeCurrentTab();
             }
@@ -886,15 +838,31 @@ public:
 
         shortcut(
             "Meta+W",
-            [this]()
+            [this]
             {
                 closeCurrentTab();
             }
         );
 
         shortcut(
+            "Ctrl+L",
+            [this]
+            {
+                focusUrlBar();
+            }
+        );
+
+        shortcut(
+            "Meta+L",
+            [this]
+            {
+                focusUrlBar();
+            }
+        );
+
+        shortcut(
             "Ctrl+R",
-            [this]()
+            [this]
             {
                 reload();
             }
@@ -902,7 +870,7 @@ public:
 
         shortcut(
             "Meta+R",
-            [this]()
+            [this]
             {
                 reload();
             }
@@ -910,7 +878,7 @@ public:
 
         shortcut(
             "Alt+Left",
-            [this]()
+            [this]
             {
                 back();
             }
@@ -918,7 +886,7 @@ public:
 
         shortcut(
             "Meta+Left",
-            [this]()
+            [this]
             {
                 back();
             }
@@ -926,7 +894,7 @@ public:
 
         shortcut(
             "Alt+Right",
-            [this]()
+            [this]
             {
                 forward();
             }
@@ -934,7 +902,7 @@ public:
 
         shortcut(
             "Meta+Right",
-            [this]()
+            [this]
             {
                 forward();
             }
@@ -942,7 +910,7 @@ public:
 
         shortcut(
             "Ctrl+Tab",
-            [this]()
+            [this]
             {
                 nextTab();
             }
@@ -950,74 +918,90 @@ public:
 
         shortcut(
             "Ctrl+Shift+Tab",
-            [this]()
+            [this]
             {
                 previousTab();
             }
         );
 
-        for (int i = 1; i <= 9; ++i)
-        {
-            QShortcut *sc =
-                new QShortcut(
-                    QKeySequence(
-                        QString("Meta+%1").arg(i)
-                    ),
-                    this
-                );
+        shortcut(
+            "Meta+1",
+            [this] { selectTab(0); }
+        );
 
-            connect(
-                sc,
-                &QShortcut::activated,
-                this,
-                [this, i]()
-                {
-                    selectTab(i - 1);
-                }
-            );
-        }
+        shortcut(
+            "Meta+2",
+            [this] { selectTab(1); }
+        );
+
+        shortcut(
+            "Meta+3",
+            [this] { selectTab(2); }
+        );
+
+        shortcut(
+            "Meta+4",
+            [this] { selectTab(3); }
+        );
+
+        shortcut(
+            "Meta+5",
+            [this] { selectTab(4); }
+        );
+
+        shortcut(
+            "Meta+6",
+            [this] { selectTab(5); }
+        );
+
+        shortcut(
+            "Meta+7",
+            [this] { selectTab(6); }
+        );
+
+        shortcut(
+            "Meta+8",
+            [this] { selectTab(7); }
+        );
+
+        shortcut(
+            "Meta+9",
+            [this]
+            {
+                selectTab(
+                    tabs_->count() - 1
+                );
+            }
+        );
 
         shortcut(
             "F11",
-            [this]()
+            [this]
             {
-                fullscreen();
+                toggleFullscreen();
             }
         );
 
         shortcut(
-            "+",
-            [this]()
-            {
-                zoomIn();
-            }
+            "Ctrl+=",
+            [this] { zoomIn(); }
         );
 
         shortcut(
-            "=",
-            [this]()
-            {
-                zoomIn();
-            }
+            "Meta+=",
+            [this] { zoomIn(); }
         );
 
         shortcut(
-            "-",
-            [this]()
-            {
-                zoomOut();
-            }
+            "Ctrl+-",
+            [this] { zoomOut(); }
         );
 
         shortcut(
-            "Meta+/",
-            [this]()
-            {
-                openReference();
-            }
+            "Meta+-",
+            [this] { zoomOut(); }
         );
     }
-
 
     template <typename Function>
     void shortcut(
@@ -1043,53 +1027,61 @@ public:
         );
     }
 
-
-    void openCommandBar()
+    void setupDownloads()
     {
-        commandPalette_->show();
-        commandPalette_->raise();
+        profile_->setDownloadPath(
+            QStandardPaths::writableLocation(
+                QStandardPaths::DownloadLocation
+            )
+        );
 
-        commandBar_->clear();
-        commandBar_->setFocus();
+        connect(
+            profile_,
+            &QWebEngineProfile::downloadRequested,
+            this,
+            [this](
+                QWebEngineDownloadRequest *download
+            )
+            {
+                if (!download)
+                    return;
 
-        if (commandBar_->completer())
-            commandBar_->completer()->complete();
-    }
+                QString directory =
+                    download->downloadDirectory();
 
+                if (directory.isEmpty())
+                    directory =
+                        profile_->downloadPath();
 
-    void currentTabFocus()
-    {
-        if (auto *view = currentTab())
-            view->setFocus();
-    }
+                QString fileName =
+                    download->downloadFileName();
 
+                if (fileName.isEmpty())
+                    fileName =
+                        download->suggestedFileName();
 
-    void openReference()
-    {
-        QString path =
-            referencePath();
+                if (fileName.isEmpty())
+                    fileName = "download";
 
-        if (path.isEmpty())
-        {
-            QMessageBox::warning(
-                this,
-                "LewWeb",
-                "lewweb-reference.html "
-                "could not be found."
-            );
+                QDir dir(directory);
 
-            return;
-        }
+                if (!dir.exists())
+                    dir.mkpath(".");
 
-        addTab(
-            QUrl::fromLocalFile(path)
+                download->setDownloadDirectory(
+                    directory
+                );
+
+                download->setDownloadFileName(
+                    fileName
+                );
+
+                download->accept();
+            }
         );
     }
 
-
-    BrowserTab *addTab(
-        const QUrl &url
-    )
+    BrowserTab *addTab(const QUrl &url)
     {
         BrowserTab *view =
             new BrowserTab(
@@ -1097,9 +1089,7 @@ public:
                 [this]() -> QWebEnginePage *
                 {
                     BrowserTab *tab =
-                        addTab(
-                            QUrl("about:blank")
-                        );
+                        addTab(QUrl("about:blank"));
 
                     return tab->page();
                 },
@@ -1109,10 +1099,142 @@ public:
         int index =
             tabs_->addTab(
                 view,
-                QString()
+                "New Tab"
             );
 
         tabs_->setCurrentIndex(index);
+
+        connect(
+            view,
+            &QWebEngineView::titleChanged,
+            this,
+            [this, view](const QString &title)
+            {
+                QString tabTitle =
+                    title.trimmed();
+
+                if (tabTitle.isEmpty())
+                    tabTitle = "New Tab";
+
+                int index =
+                    tabs_->indexOf(view);
+
+                if (index >= 0)
+                {
+                    tabs_->setTabText(
+                        index,
+                        tabTitle.left(32)
+                    );
+                }
+
+                updateWindowTitle();
+            }
+        );
+
+        connect(
+            view,
+            &QWebEngineView::urlChanged,
+            this,
+            [this, view](const QUrl &)
+            {
+                if (view == currentTab())
+                    updateUrlBar();
+
+                updateButtons();
+            }
+        );
+
+        connect(
+            view,
+            &QWebEngineView::iconChanged,
+            this,
+            [this, view](const QIcon &icon)
+            {
+                int index =
+                    tabs_->indexOf(view);
+
+                if (
+                    index >= 0 &&
+                    !icon.isNull()
+                )
+                {
+                    tabs_->setTabIcon(
+                        index,
+                        icon
+                    );
+                }
+            }
+        );
+
+        connect(
+            view,
+            &QWebEngineView::loadProgress,
+            this,
+            [this, view](int progress)
+            {
+                if (view != currentTab())
+                    return;
+
+                if (progress >= 100)
+                {
+                    progressBar_->hide();
+                    reloadButton_->setIcon(
+                        QApplication::style()->standardIcon(
+                            QStyle::SP_BrowserReload
+                        )
+                    );
+                }
+                else
+                {
+                    progressBar_->setValue(progress);
+                    progressBar_->show();
+                    reloadButton_->setIcon(
+                        QApplication::style()->standardIcon(
+                            QStyle::SP_BrowserStop
+                        )
+                    );
+                }
+            }
+        );
+
+        connect(
+            view,
+            &QWebEngineView::loadFinished,
+            this,
+            [this, view](bool ok)
+            {
+                progressBar_->hide();
+
+                reloadButton_->setIcon(
+                    QApplication::style()->standardIcon(
+                        QStyle::SP_BrowserReload
+                    )
+                );
+
+                if (!ok)
+                    return;
+
+                QString url =
+                    view->url().toString();
+
+                if (!url.isEmpty())
+                    recordHistory(
+                        view->title(),
+                        url
+                    );
+
+                if (
+                    !siteTheme_.isEmpty() &&
+                    siteTheme_ != "system"
+                )
+                {
+                    applySiteTheme(
+                        view,
+                        siteTheme_
+                    );
+                }
+            }
+        );
 
         connect(
             view->page(),
@@ -1131,53 +1253,41 @@ public:
             }
         );
 
-        connect(
-            view,
-            &QWebEngineView::titleChanged,
-            this,
-            [this](const QString &)
-            {
-                updateWindowTitle();
-            }
-        );
-
-        connect(
-            view,
-            &QWebEngineView::loadProgress,
-            this,
-            [this](int progress)
-            {
-                if (progress >= 100)
-                {
-                    progressBar_->setValue(100);
-                    progressBar_->hide();
-                    return;
-                }
-
-                progressBar_->setValue(progress);
-                progressBar_->show();
-                progressBar_->raise();
-            }
-        );
-
-        connect(
-            view,
-            &QWebEngineView::loadFinished,
-            this,
-            [this, view](bool)
-            {
-                progressBar_->hide();
-                updateWindowTitle();
-                siteTheme(siteTheme_);
-            }
-        );
-
         view->load(url);
-        view->setFocus();
-
         return view;
     }
 
+    void closeTab(int index)
+    {
+        if (
+            index < 0 ||
+            index >= tabs_->count()
+        )
+        {
+            return;
+        }
+
+        if (tabs_->count() == 1)
+        {
+            addTab(QUrl(config_.homepage));
+        }
+
+        QWidget *widget =
+            tabs_->widget(index);
+
+        tabs_->removeTab(index);
+        widget->deleteLater();
+
+        updateUrlBar();
+        updateButtons();
+    }
+
+    void closeCurrentTab()
+    {
+        closeTab(
+            tabs_->currentIndex()
+        );
+    }
 
     BrowserTab *currentTab() const
     {
@@ -1186,104 +1296,46 @@ public:
         );
     }
 
-
-    void open(
-        const QUrl &url
-    )
+    void openUrl(const QUrl &url)
     {
         if (auto *view = currentTab())
             view->load(url);
     }
 
-
-    void search(
-        const QString &query,
-        const QString &site = QString()
-    )
+    void navigateFromUrlBar()
     {
-        QString encoded =
-            QString::fromUtf8(
-                QUrl::toPercentEncoding(query)
-            );
+        QString input =
+            urlBar_->text().trimmed();
 
-        if (site == "wikipedia")
+        if (input.isEmpty())
+            return;
+
+        QUrl url = QUrl::fromUserInput(input);
+
+        bool looksLikeUrl =
+            input.contains("://") ||
+            input.startsWith("localhost") ||
+            input.startsWith("127.0.0.1") ||
+            input.contains('.');
+
+        if (
+            !looksLikeUrl ||
+            !url.isValid() ||
+            url.scheme().isEmpty()
+        )
         {
-            open(
+            url =
                 QUrl(
-                    "https://en.wikipedia.org/wiki/"
-                    "Special:Search?search=" +
-                    encoded
-                )
-            );
+                    searchUrl(
+                        config_.searchEngine,
+                        input
+                    )
+                );
         }
-        else if (site == "github")
-        {
-            open(
-                QUrl(
-                    "https://github.com/search?q=" +
-                    encoded
-                )
-            );
-        }
-        else if (site == "youtube")
-        {
-            open(
-                QUrl(
-                    "https://www.youtube.com/results?"
-                    "search_query=" +
-                    encoded
-                )
-            );
-        }
-        else if (site == "reddit")
-        {
-            open(
-                QUrl(
-                    "https://www.reddit.com/search/?q=" +
-                    encoded
-                )
-            );
-        }
-        else if (site == "google")
-        {
-            open(
-                QUrl(
-                    "https://www.google.com/search?q=" +
-                    encoded
-                )
-            );
-        }
-        else if (site == "images")
-        {
-            open(
-                QUrl(
-                    "https://duckduckgo.com/?iax=images"
-                    "&ia=images&q=" +
-                    encoded
-                )
-            );
-        }
-        else if (site == "news")
-        {
-            open(
-                QUrl(
-                    "https://duckduckgo.com/?iar=news"
-                    "&ia=news&q=" +
-                    encoded
-                )
-            );
-        }
-        else
-        {
-            open(
-                QUrl(
-                    "https://duckduckgo.com/?q=" +
-                    encoded
-                )
-            );
-        }
+
+        openUrl(url);
+        currentTabFocus();
     }
-
 
     void back()
     {
@@ -1291,13 +1343,11 @@ public:
             view->back();
     }
 
-
     void forward()
     {
         if (auto *view = currentTab())
             view->forward();
     }
-
 
     void reload()
     {
@@ -1305,39 +1355,32 @@ public:
             view->reload();
     }
 
-
     void stop()
     {
         if (auto *view = currentTab())
             view->stop();
     }
 
-
     void nextTab()
     {
-        int count =
-            tabs_->count();
+        int count = tabs_->count();
 
-        if (count == 0)
+        if (count < 2)
             return;
 
         int index =
-            tabs_->currentIndex() + 1;
-
-        if (index >= count)
-            index = 0;
+            (tabs_->currentIndex() + 1) %
+            count;
 
         tabs_->setCurrentIndex(index);
         currentTabFocus();
     }
 
-
     void previousTab()
     {
-        int count =
-            tabs_->count();
+        int count = tabs_->count();
 
-        if (count == 0)
+        if (count < 2)
             return;
 
         int index =
@@ -1350,10 +1393,7 @@ public:
         currentTabFocus();
     }
 
-
-    void selectTab(
-        int index
-    )
+    void selectTab(int index)
     {
         if (
             index >= 0 &&
@@ -1365,67 +1405,500 @@ public:
         }
     }
 
-
-    void closeCurrentTab()
+    void currentTabFocus()
     {
-        int index =
-            tabs_->currentIndex();
+        if (auto *view = currentTab())
+            view->setFocus();
+    }
 
-        if (index < 0)
+    void focusUrlBar()
+    {
+        urlBar_->setFocus();
+        urlBar_->selectAll();
+    }
+
+    void updateUrlBar()
+    {
+        if (!urlBar_)
             return;
 
-        if (tabs_->count() == 1)
+        if (auto *view = currentTab())
         {
-            close();
+            QSignalBlocker blocker(urlBar_);
+
+            urlBar_->setText(
+                view->url().toString()
+            );
+
+            urlBar_->setCursorPosition(0);
+        }
+        else
+        {
+            urlBar_->clear();
+        }
+    }
+
+    void updateButtons()
+    {
+        auto *view = currentTab();
+
+        bool valid = view != nullptr;
+
+        backButton_->setEnabled(
+            valid && view->history()->canGoBack()
+        );
+
+        forwardButton_->setEnabled(
+            valid && view->history()->canGoForward()
+        );
+
+        reloadButton_->setEnabled(valid);
+        homeButton_->setEnabled(valid);
+        starButton_->setEnabled(valid);
+    }
+
+    void updateWindowTitle()
+    {
+        auto *view = currentTab();
+
+        if (!view)
+        {
+            setWindowTitle("LewWeb");
             return;
         }
 
-        QWidget *widget =
-            tabs_->widget(index);
+        QString title =
+            view->title().trimmed();
 
-        tabs_->removeTab(index);
-        widget->deleteLater();
+        if (title.isEmpty())
+            title = "LewWeb";
 
-        currentTabFocus();
+        setWindowTitle(
+            title + " — LewWeb"
+        );
     }
 
+    void recordHistory(
+        const QString &title,
+        const QString &url
+    )
+    {
+        QString cleanUrl =
+            url.trimmed();
+
+        if (
+            cleanUrl.isEmpty() ||
+            cleanUrl.startsWith(
+                "about:",
+                Qt::CaseInsensitive
+            )
+        )
+        {
+            return;
+        }
+
+        for (int i = 0; i < history_.size(); ++i)
+        {
+            if (history_.at(i).url == cleanUrl)
+            {
+                history_.removeAt(i);
+                break;
+            }
+        }
+
+        HistoryEntry entry;
+
+        entry.title =
+            title.trimmed();
+
+        if (entry.title.isEmpty())
+            entry.title = QUrl(cleanUrl).host();
+
+        if (entry.title.isEmpty())
+            entry.title = "New Page";
+
+        entry.url = cleanUrl;
+
+        history_.prepend(entry);
+
+        while (history_.size() > 100)
+            history_.removeLast();
+
+        saveHistory(history_);
+    }
+
+    void saveCurrentBookmark()
+    {
+        auto *view = currentTab();
+
+        if (!view)
+            return;
+
+        QString url =
+            view->url().toString();
+
+        if (url.isEmpty())
+            return;
+
+        QString title =
+            view->title().trimmed();
+
+        if (title.isEmpty())
+            title = view->url().host();
+
+        if (title.isEmpty())
+            title = "Bookmark";
+
+        if (!addBookmark(title, url))
+        {
+            QMessageBox::warning(
+                this,
+                "LewWeb",
+                "Could not save bookmark."
+            );
+        }
+        else
+        {
+            starButton_->setToolTip(
+                "Bookmark saved"
+            );
+        }
+    }
+
+    void showMenu()
+    {
+        QMenu menu(this);
+
+        QAction *newTab =
+            menu.addAction("New Tab");
+
+        QAction *home =
+            menu.addAction("Home");
+
+        QAction *history =
+            menu.addAction("History");
+
+        QAction *bookmarks =
+            menu.addAction("Bookmarks");
+
+        menu.addSeparator();
+
+        QMenu *zoomMenu =
+            menu.addMenu("Zoom");
+
+        QAction *zoomInAction =
+            zoomMenu->addAction("Zoom In");
+
+        QAction *zoomOutAction =
+            zoomMenu->addAction("Zoom Out");
+
+        QAction *resetZoomAction =
+            zoomMenu->addAction("Reset Zoom");
+
+        QMenu *themeMenu =
+            menu.addMenu("Web Theme");
+
+        QAction *lightAction =
+            themeMenu->addAction("Light");
+
+        QAction *darkAction =
+            themeMenu->addAction("Dark");
+
+        menu.addSeparator();
+
+        QAction *fullscreen =
+            menu.addAction("Fullscreen");
+
+        QAction *settings =
+            menu.addAction("Browser Settings");
+
+        QAction *quit =
+            menu.addAction("Quit");
+
+        QAction *chosen =
+            menu.exec(
+                menuButton_->mapToGlobal(
+                    QPoint(
+                        0,
+                        menuButton_->height()
+                    )
+                )
+            );
+
+        if (chosen == newTab)
+        {
+            addTab(QUrl(config_.homepage));
+        }
+        else if (chosen == home)
+        {
+            openUrl(QUrl(config_.homepage));
+        }
+        else if (chosen == history)
+        {
+            showHistory();
+        }
+        else if (chosen == bookmarks)
+        {
+            showBookmarks();
+        }
+        else if (chosen == zoomInAction)
+        {
+            zoomIn();
+        }
+        else if (chosen == zoomOutAction)
+        {
+            zoomOut();
+        }
+        else if (chosen == resetZoomAction)
+        {
+            setZoom(config_.zoom);
+        }
+        else if (chosen == lightAction)
+        {
+            config_.theme = "light";
+            siteTheme_ = "light";
+            saveConfig(config_, configPath());
+            applyConfig();
+            applySiteThemeToCurrent();
+        }
+        else if (chosen == darkAction)
+        {
+            config_.theme = "dark";
+            siteTheme_ = "dark";
+            saveConfig(config_, configPath());
+            applyConfig();
+            applySiteThemeToCurrent();
+        }
+        else if (chosen == fullscreen)
+        {
+            toggleFullscreen();
+        }
+        else if (chosen == settings)
+        {
+            showSettings();
+        }
+        else if (chosen == quit)
+        {
+            close();
+        }
+    }
+
+    void showHistory()
+    {
+        QMenu menu(this);
+
+        int count = 0;
+
+        for (const HistoryEntry &entry : history_)
+        {
+            if (count >= 30)
+                break;
+
+            QString label =
+                entry.title.isEmpty()
+                    ? entry.url
+                    : entry.title;
+
+            QAction *action =
+                menu.addAction(label.left(80));
+
+            action->setToolTip(entry.url);
+            action->setData(entry.url);
+
+            ++count;
+        }
+
+        if (count == 0)
+        {
+            menu.addAction("No history.")
+                ->setEnabled(false);
+        }
+
+        QAction *clear =
+            menu.addAction("Clear History");
+
+        QAction *chosen =
+            menu.exec(
+                menuButton_->mapToGlobal(
+                    QPoint(
+                        0,
+                        menuButton_->height()
+                    )
+                )
+            );
+
+        if (chosen == clear)
+        {
+            history_.clear();
+            saveHistory(history_);
+            return;
+        }
+
+        if (
+            chosen &&
+            chosen->data().isValid()
+        )
+        {
+            openUrl(
+                QUrl(
+                    chosen->data().toString()
+                )
+            );
+        }
+    }
+
+    void showBookmarks()
+    {
+        QMenu menu(this);
+
+        QJsonObject bookmarks =
+            loadBookmarks();
+
+        QList<QAction *> bookmarkActions;
+
+        for (
+            auto it = bookmarks.begin();
+            it != bookmarks.end();
+            ++it
+        )
+        {
+            QAction *action =
+                menu.addAction(it.key());
+
+            action->setData(
+                it.value().toString()
+            );
+
+            bookmarkActions.append(action);
+        }
+
+        if (bookmarkActions.isEmpty())
+        {
+            menu.addAction(
+                "No bookmarks."
+            )->setEnabled(false);
+        }
+
+        menu.addSeparator();
+
+        QAction *remove =
+            menu.addAction(
+                "Remove Current Page Bookmark"
+            );
+
+        QAction *chosen =
+            menu.exec(
+                menuButton_->mapToGlobal(
+                    QPoint(
+                        0,
+                        menuButton_->height()
+                    )
+                )
+            );
+
+        if (chosen == remove)
+        {
+            auto *view = currentTab();
+
+            if (view)
+            {
+                QString title =
+                    view->title().trimmed();
+
+                if (!title.isEmpty())
+                    removeBookmark(title);
+            }
+
+            return;
+        }
+
+        if (
+            chosen &&
+            chosen->data().isValid()
+        )
+        {
+            openUrl(
+                QUrl(
+                    chosen->data().toString()
+                )
+            );
+        }
+    }
+
+    void showSettings()
+    {
+        QMessageBox box(this);
+
+        box.setWindowTitle("LewWeb Browser Settings");
+
+        box.setText(
+            QString(
+                "LewWeb %1\n\n"
+                "Homepage: %2\n"
+                "Search engine: %3\n"
+                "Default zoom: %4%\n\n"
+                "Persistent browser profile:\n%5"
+            )
+            .arg(
+                LEWWEB_VERSION,
+                config_.homepage,
+                config_.searchEngine,
+                QString::number(config_.zoom),
+                profilePath()
+            )
+        );
+
+        box.setInformativeText(
+            "Your cookies, local storage, cache, and other "
+            "Chromium profile data are kept in the persistent "
+            "LewWeb profile so supported website logins can "
+            "survive browser restarts."
+        );
+
+        box.exec();
+    }
 
     void zoomIn()
     {
         if (auto *view = currentTab())
         {
             view->setZoomFactor(
-                view->zoomFactor() + 0.1
+                qMin(
+                    5.0,
+                    view->zoomFactor() + 0.1
+                )
             );
         }
     }
-
 
     void zoomOut()
     {
         if (auto *view = currentTab())
         {
             view->setZoomFactor(
-                view->zoomFactor() - 0.1
+                qMax(
+                    0.25,
+                    view->zoomFactor() - 0.1
+                )
             );
         }
     }
 
-
-    void zoom(
-        int percentage
-    )
+    void setZoom(int percentage)
     {
         if (auto *view = currentTab())
         {
             view->setZoomFactor(
-                percentage / 100.0
+                qBound(
+                    0.25,
+                    percentage / 100.0,
+                    5.0
+                )
             );
         }
     }
 
-
-    void fullscreen()
+    void toggleFullscreen()
     {
         if (isFullScreen())
             showNormal();
@@ -1433,258 +1906,75 @@ public:
             showFullScreen();
     }
 
-
-    void exitFullscreen()
-    {
-        if (isFullScreen())
-            showNormal();
-    }
-
-
-    void javascript(
-        bool enabled
-    )
+    void applySiteThemeToCurrent()
     {
         if (auto *view = currentTab())
-        {
-            view->settings()->setAttribute(
-                QWebEngineSettings::JavascriptEnabled,
-                enabled
+            applySiteTheme(
+                view,
+                siteTheme_
             );
-
-            view->reload();
-        }
     }
 
-
-    void siteTheme(
+    void applySiteTheme(
+        BrowserTab *view,
         const QString &theme
     )
     {
-        auto *view = currentTab();
-
         if (!view)
             return;
 
-        const QString script =
-            QString(R"JS(
-                (() => {
-                    const theme = '%1';
-                    const root = document.documentElement;
-                    const styleId = 'lewweb-site-theme';
+        QString script =
+            QString(
+                R"JS(
+                    (() => {
+                        const root =
+                            document.documentElement;
 
-                    root.style.setProperty(
-                        'color-scheme',
-                        theme,
-                        'important'
-                    );
-
-                    let meta =
-                        document.querySelector(
-                            'meta[name="color-scheme"]'
+                        root.style.setProperty(
+                            'color-scheme',
+                            '%1',
+                            'important'
                         );
 
-                    if (!meta)
-                    {
-                        meta = document.createElement('meta');
-                        meta.name = 'color-scheme';
-                        document.head.appendChild(meta);
-                    }
+                        let meta =
+                            document.querySelector(
+                                'meta[name="color-scheme"]'
+                            );
 
-                    meta.content = theme;
-                    root.setAttribute(
-                        'data-lewweb-theme',
-                        theme
-                    );
+                        if (!meta) {
+                            meta =
+                                document.createElement(
+                                    'meta'
+                                );
 
-                    let style =
-                        document.getElementById(styleId);
+                            meta.name =
+                                'color-scheme';
 
-                    if (style)
-                        style.remove();
+                            document.head.appendChild(
+                                meta
+                            );
+                        }
 
-                    if (theme === 'dark')
-                    {
-                        style = document.createElement('style');
-                        style.id = styleId;
-                        style.textContent = `
-                            html, body {
-                                background-color: #121212 !important;
-                                color: #e8e8e8 !important;
-                            }
+                        meta.content = '%1';
 
-                            body *:not(img):not(video):not(canvas):not(svg):not(path) {
-                                color: #e8e8e8 !important;
-                                border-color: #444 !important;
-                            }
-
-                            body, main, section, article, aside, header,
-                            footer, nav, div, form, fieldset, table, tr,
-                            td, th, pre, blockquote, textarea, input,
-                            select, button {
-                                background-color: #121212 !important;
-                            }
-
-                            a {
-                                color: #8ab4f8 !important;
-                            }
-
-                            input, textarea, select, button {
-                                color: #e8e8e8 !important;
-                                background-color: #1e1e1e !important;
-                                border-color: #555 !important;
-                            }
-
-                            ::placeholder {
-                                color: #aaa !important;
-                            }
-                        `;
-                        (document.head || document.documentElement)
-                            .appendChild(style);
-                    }
-                })();
-            )JS").arg(theme);
+                        root.setAttribute(
+                            'data-lewweb-theme',
+                            '%1'
+                        );
+                    })();
+                )JS"
+            )
+            .arg(theme);
 
         view->page()->runJavaScript(script);
     }
 
-    QString currentUrl() const
-    {
-        if (auto *view = currentTab())
-            return view->url().toString();
-
-        return {};
-    }
-
-
-    void listTabs()
-    {
-        qInfo() << "TABS";
-
-        for (
-            int i = 0;
-            i < tabs_->count();
-            ++i
-        )
-        {
-            auto *view =
-                static_cast<BrowserTab *>(
-                    tabs_->widget(i)
-                );
-
-            if (!view)
-                continue;
-
-            QString title =
-                view->title();
-
-            if (title.isEmpty())
-                title = "New Tab";
-
-            qInfo().noquote()
-                << QString("[%1] %2")
-                    .arg(i + 1)
-                    .arg(title);
-        }
-    }
-
-
-    void saveCurrentBookmark(
-        const QString &name
-    )
-    {
-        QString url =
-            currentUrl();
-
-        if (!url.isEmpty())
-            addBookmark(name, url);
-    }
-
-
-    void downloadFile(
-        const QString &url,
-        const QString &directory
-    )
-    {
-        if (
-            url.trimmed().isEmpty() ||
-            directory.trimmed().isEmpty()
-        )
-        {
-            qWarning()
-                << "LewWeb: download requires URL and directory.";
-
-            return;
-        }
-
-        QDir dir(directory);
-
-        if (!dir.exists())
-        {
-            if (!dir.mkpath("."))
-            {
-                qWarning()
-                    << "LewWeb: could not create:"
-                    << directory;
-
-                return;
-            }
-        }
-
-        pendingDownloadDirectory_ =
-            QDir(directory).absolutePath();
-
-        QUrl target(url);
-
-        if (!target.isValid())
-        {
-            pendingDownloadDirectory_.clear();
-
-            qWarning()
-                << "LewWeb: invalid download URL:"
-                << url;
-
-            return;
-        }
-
-        if (auto *view = currentTab())
-        {
-            view->page()->download(target);
-        }
-        else
-        {
-            pendingDownloadDirectory_.clear();
-
-            qWarning()
-                << "LewWeb: no browser tab available.";
-        }
-    }
-
-
-    void downloadPinterestImage(
-        const QString &url,
-        const QString &directory
-    )
-    {
-        if (
-            url.trimmed().isEmpty() ||
-            directory.trimmed().isEmpty()
-        )
-        {
-            return;
-        }
-
-        runPinterestDownloader(
-            url,
-            directory
-        );
-    }
-
-
-private:
     void applyConfig()
     {
-        if (config_.windowBorder == "borderless")
+        if (
+            config_.windowBorder ==
+            "borderless"
+        )
         {
             setWindowFlags(
                 Qt::FramelessWindowHint |
@@ -1693,21 +1983,11 @@ private:
         }
         else
         {
-            setWindowFlags(
-                Qt::Window
-            );
+            setWindowFlags(Qt::Window);
         }
-    }
 
-
-    void applyWidgetStyle()
-    {
         QString browserColour =
             QColor(config_.browserColour)
-                .name();
-
-        QString borderColour =
-            QColor(config_.borderColour)
                 .name();
 
         QString backgroundColour =
@@ -1718,1409 +1998,186 @@ private:
 
         if (backgroundColour.isEmpty())
         {
-            if (config_.theme == "dark")
-                backgroundColour = "#181818";
-            else
-                backgroundColour = "#ffffff";
+            backgroundColour =
+                config_.theme == "dark"
+                    ? "#181818"
+                    : "#ffffff";
         }
 
         if (textColour.isEmpty())
         {
-            if (config_.theme == "dark")
-                textColour = "#ffffff";
-            else
-                textColour = "#111111";
+            textColour =
+                config_.theme == "dark"
+                    ? "#ffffff"
+                    : "#111111";
         }
 
-        QString windowStyle;
+        QString toolbarColour =
+            config_.theme == "dark"
+                ? "#000000"
+                : "#ffffff";
 
-        if (config_.windowBorder == "borderless")
-        {
-            windowStyle =
-                QString(
-                    "QMainWindow {"
-                    "border: 2px solid %1;"
-                    "background: %2;"
-                    "}"
-                )
-                .arg(
-                    borderColour,
-                    backgroundColour
-                );
-        }
-        else
-        {
-            windowStyle =
-                QString(
-                    "QMainWindow {"
-                    "background: %1;"
-                    "}"
-                )
-                .arg(backgroundColour);
-        }
+        QString toolbarTop =
+            config_.theme == "dark"
+                ? "#2a2a2a"
+                : "#ffffff";
 
-        QString commandStyle =
+        QString toolbarBottom =
+            config_.theme == "dark"
+                ? "#000000"
+                : "#d9d9d9";
+
+        QString buttonTop =
+            config_.theme == "dark"
+                ? "#3a3a3a"
+                : "#ffffff";
+
+        QString buttonBottom =
+            config_.theme == "dark"
+                ? "#111111"
+                : "#cfcfcf";
+
+        QString buttonBorder =
+            config_.theme == "dark"
+                ? "#555555"
+                : "#8a8a8a";
+
+        QString chromeText =
+            config_.theme == "dark"
+                ? "#ffffff"
+                : "#111111";
+
+        setStyleSheet(
             QString(
-                "QWidget#commandPalette {"
+                "QMainWindow {"
+                "background: %1;"
+                "}"
+                "QWidget#toolbar {"
                 "background: qlineargradient("
-                    "x1:0, y1:0, x2:0, y2:1,"
-                    "stop:0 #f5f5f5,"
-                    "stop:0.08 #dedede,"
-                    "stop:0.5 #bcbcbc,"
-                    "stop:0.92 #929292,"
-                    "stop:1 #737373"
-                ");"
-                "border: 1px solid #4a4a4a;"
-                "border-radius: 7px;"
+                "x1:0, y1:0, x2:0, y2:1,"
+                "stop:0 %2, stop:0.48 %3, stop:1 %4);"
+                "border-top: 1px solid %5;"
+                "border-bottom: 1px solid %6;"
                 "}"
-                "QLabel {"
-                "color: #202020;"
-                "font-family: monospace;"
-                "font-size: 14px;"
-                "font-weight: bold;"
+                "QToolButton#navButton {"
+                "color: %7;"
+                "background: qlineargradient("
+                "x1:0, y1:0, x2:0, y2:1,"
+                "stop:0 %8, stop:0.48 %8, stop:1 %9);"
+                "border: 1px solid %10;"
+                "border-radius: 5px;"
+                "padding: 5px 7px;"
                 "}"
-                "QLineEdit {"
-                "background: rgba(255,255,255,220);"
-                "color: #111111;"
-                "border: 1px solid #666666;"
-                "border-top-color: #333333;"
-                "border-radius: 3px;"
-                "padding: 5px 8px;"
-                "font-family: monospace;"
-                "font-size: 14px;"
-                "selection-background-color: %1;"
+                "QToolButton#navButton:hover {"
+                "background: qlineargradient("
+                "x1:0, y1:0, x2:0, y2:1,"
+                "stop:0 %2, stop:0.48 %3, stop:1 %4);"
                 "}"
-                "QAbstractItemView {"
-                "background: #eeeeee;"
-                "color: #111111;"
-                "border: 1px solid #555555;"
-                "selection-background-color: %1;"
-                "selection-color: white;"
-                "font-family: monospace;"
-                "font-size: 13px;"
+                "QToolButton#navButton:pressed {"
+                "padding-top: 6px;"
+                "padding-left: 8px;"
+                "background: %9;"
                 "}"
-            )
-            .arg(browserColour);
-
-        QString progressStyle =
-            QString(
+                "QToolButton#navButton:disabled {"
+                "color: #888888;"
+                "}"
+                "QLineEdit#urlBar {"
+                "background: qlineargradient("
+                "x1:0, y1:0, x2:0, y2:1,"
+                "stop:0 %2, stop:0.45 %2, stop:1 %3);"
+                "color: %7;"
+                "border: 1px solid %10;"
+                "border-radius: 16px;"
+                "padding: 7px 14px;"
+                "selection-background-color: %11;"
+                "}"
+                "QLineEdit#urlBar:focus {"
+                "border: 1px solid %11;"
+                "}"
+                "QTabBar::tab {"
+                "background: %3;"
+                "color: %7;"
+                "padding: 8px 14px;"
+                "min-width: 100px;"
+                "max-width: 220px;"
+                "border: 1px solid %10;"
+                "border-bottom: none;"
+                "}"
+                "QTabBar::tab:selected {"
+                "background: %11;"
+                "color: white;"
+                "}"
                 "QProgressBar {"
                 "background: transparent;"
                 "border: none;"
                 "}"
                 "QProgressBar::chunk {"
-                "background: %1;"
+                "background: %11;"
                 "}"
             )
-            .arg(browserColour);
-
-        setStyleSheet(
-            windowStyle +
-            commandStyle
+            .arg(
+                backgroundColour,
+                toolbarTop,
+                toolbarBottom,
+                toolbarColour,
+                buttonBorder,
+                buttonBorder,
+                chromeText,
+                buttonTop,
+                buttonBottom,
+                buttonBorder,
+                browserColour
+            )
         );
 
-        if (commandPalette_)
-            commandPalette_->setStyleSheet(
-                commandStyle
-            );
-
-        if (progressBar_)
-            progressBar_->setStyleSheet(
-                progressStyle
-            );
-
-        QPalette palette =
-            QApplication::palette();
-
-        palette.setColor(
-            QPalette::Window,
-            QColor(backgroundColour)
-        );
-
-        palette.setColor(
-            QPalette::Base,
-            QColor(backgroundColour)
-        );
-
-        palette.setColor(
-            QPalette::Text,
-            QColor(textColour)
-        );
-
-        palette.setColor(
-            QPalette::WindowText,
-            QColor(textColour)
-        );
-
-        setPalette(palette);
+        showNormal();
+        updateUrlBar();
+        updateButtons();
+        updateWindowTitle();
     }
 
-
-    void executeCommand(
-        QString command
-    )
+protected:
+    void closeEvent(QCloseEvent *event) override
     {
-        command = command.trimmed();
-
-        if (command.startsWith("lewweb"))
-        {
-            command =
-                command
-                    .mid(
-                        QString("lewweb").length()
-                    )
-                    .trimmed();
-        }
-
-        if (command.isEmpty())
-            return;
-
-        QStringList parts =
-            command.split(
-                ' ',
-                Qt::SkipEmptyParts
-            );
-
-        if (parts.isEmpty())
-            return;
-
-        QString action =
-            parts.first();
-
-        parts.removeFirst();
-
-        if (action == "--search")
-        {
-            QStringList queryParts;
-            QString site;
-
-            for (const QString &part : parts)
-            {
-                if (part == "--wikipedia")
-                    site = "wikipedia";
-                else if (part == "--github")
-                    site = "github";
-                else if (part == "--youtube")
-                    site = "youtube";
-                else if (part == "--reddit")
-                    site = "reddit";
-                else if (part == "--google")
-                    site = "google";
-                else if (part == "--images")
-                    site = "images";
-                else if (part == "--news")
-                    site = "news";
-                else
-                    queryParts.append(part);
-            }
-
-            search(
-                queryParts.join(" "),
-                site
-            );
-        }
-        else if (action == "--open")
-        {
-            if (!parts.isEmpty())
-                open(QUrl(parts.join(" ")));
-        }
-        else if (action == "--home")
-        {
-            open(QUrl(config_.homepage));
-        }
-        else if (action == "--back")
-        {
-            back();
-        }
-        else if (action == "--forward")
-        {
-            forward();
-        }
-        else if (action == "--reload")
-        {
-            reload();
-        }
-        else if (action == "--stop")
-        {
-            stop();
-        }
-        else if (action == "--new-tab")
-        {
-            addTab(QUrl(config_.homepage));
-        }
-        else if (action == "--close-tab")
-        {
-            closeCurrentTab();
-        }
-        else if (action == "--next-tab")
-        {
-            nextTab();
-        }
-        else if (action == "--previous-tab")
-        {
-            previousTab();
-        }
-        else if (action == "--tab")
-        {
-            if (!parts.isEmpty())
-                selectTab(
-                    parts.first().toInt() - 1
-                );
-        }
-        else if (action == "--zoom-in")
-        {
-            zoomIn();
-        }
-        else if (action == "--zoom-out")
-        {
-            zoomOut();
-        }
-        else if (action == "--zoom")
-        {
-            if (!parts.isEmpty())
-                zoom(parts.first().toInt());
-        }
-        else if (action == "--fullscreen")
-        {
-            fullscreen();
-        }
-        else if (action == "--exit-fullscreen")
-        {
-            exitFullscreen();
-        }
-        else if (action == "--javascript")
-        {
-            if (!parts.isEmpty())
-            {
-                javascript(
-                    parts.first().toLower() != "off"
-                );
-            }
-        }
-        else if (action == "--light-mode")
-        {
-            siteTheme_ = "light";
-            siteTheme(siteTheme_);
-        }
-        else if (action == "--dark-mode")
-        {
-            siteTheme_ = "dark";
-            siteTheme(siteTheme_);
-        }
-        else if (action == "--download-file")
-        {
-            if (parts.size() >= 2)
-            {
-                downloadFile(
-                    parts.at(0),
-                    parts.at(1)
-                );
-            }
-        }
-        else if (action == "--download-pinterest-image")
-        {
-            if (parts.size() >= 2)
-            {
-                downloadPinterestImage(
-                    parts.at(0),
-                    parts.at(1)
-                );
-            }
-        }
-        else if (action == "--list-tabs")
-        {
-            listTabs();
-        }
-        else if (action == "--new-bookmark")
-        {
-            if (parts.size() >= 2)
-            {
-                addBookmark(
-                    parts.first(),
-                    parts.mid(1).join(" ")
-                );
-            }
-        }
-        else if (action == "--save-bookmark")
-        {
-            if (!parts.isEmpty())
-                saveCurrentBookmark(parts.first());
-        }
-        else if (action == "--open-bookmark")
-        {
-            if (!parts.isEmpty())
-            {
-                QString url =
-                    bookmarkUrl(parts.first());
-
-                if (!url.isEmpty())
-                    open(QUrl(url));
-            }
-        }
-        else if (action == "--delete-bookmark")
-        {
-            if (!parts.isEmpty())
-                removeBookmark(parts.first());
-        }
-        else if (action == "--help")
-        {
-            printHelp();
-        }
-        else if (action == "--version")
-        {
-            printVersion();
-        }
+        saveConfig(config_, configPath());
+        QMainWindow::closeEvent(event);
     }
 
+private:
+    QTabWidget *tabs_ = nullptr;
+    QWebEngineProfile *profile_ = nullptr;
 
-    void updateWindowTitle()
-    {
-        auto *view =
-            currentTab();
+    QToolButton *backButton_ = nullptr;
+    QToolButton *forwardButton_ = nullptr;
+    QToolButton *reloadButton_ = nullptr;
+    QToolButton *homeButton_ = nullptr;
+    QToolButton *starButton_ = nullptr;
+    QToolButton *newTabButton_ = nullptr;
+    QToolButton *menuButton_ = nullptr;
 
-        if (!view)
-        {
-            setWindowTitle("LewWeb");
-            return;
-        }
-
-        QString title =
-            view->title();
-
-        if (title.isEmpty())
-            title = "LewWeb";
-
-        setWindowTitle(
-            title + " — LewWeb"
-        );
-    }
-
-
-    QTabWidget *tabs_;
-    QWebEngineProfile *profile_;
-    QWidget *commandPalette_;
-    QLabel *commandPrompt_;
-    QLineEdit *commandBar_;
-    QProgressBar *progressBar_;
+    QLineEdit *urlBar_ = nullptr;
+    QProgressBar *progressBar_ = nullptr;
 
     BrowserConfig config_;
+    QList<HistoryEntry> history_;
 
     QString siteTheme_ = "light";
-
-    QString pendingDownloadDirectory_;
 };
 
-
-static void printHelp()
+int main(int argc, char *argv[])
 {
-    qInfo().noquote()
-        << R"(LEWWEB HELP                                      lewweb
-
-lewweb(1)               LewWeb Manual               lewweb(1)
-
-NAME
-    lewweb - terminal-controlled Qt web browser
-
-SYNOPSIS
-    lewweb [options]
-
-DESCRIPTION
-    LewWeb is a terminal-driven web browser using
-    Qt WebEngine and Chromium.
-
-NAVIGATION
-    --open URL
-    --search QUERY
-    --home
-    --back
-    --forward
-    --reload
-    --stop
-
-SEARCH
-    --wikipedia
-    --github
-    --youtube
-    --reddit
-    --google
-    --images
-    --news
-
-TABS
-    --new-tab
-    --close-tab
-    --tab N
-    --next-tab
-    --previous-tab
-    --list-tabs
-
-DOWNLOADS
-    --download-file URL DIR
-        Download a direct file using Qt WebEngine.
-
-    --download-pinterest-image URL DIR
-        Download a Pinterest image using lew-dlp.
-
-BOOKMARKS
-    --new-bookmark NAME URL
-    --save-bookmark NAME
-    --open-bookmark NAME
-    --delete-bookmark NAME
-
-CONFIGURATION
-    --config FILE
-        Load browser configuration from a JSON file.
-
-    Example:
-        lewweb --config ~/Documents/lewweb.json
-
-    Supported configuration keys:
-
-        window_border
-            "default"
-            "borderless"
-
-        theme
-            "light"
-            "dark"
-
-        browser_colour
-            CSS/hex colour used by LewWeb's browser accent.
-
-        border_colour
-            CSS/hex colour used for the borderless window.
-
-        background_colour
-            CSS/hex background colour.
-
-        text_colour
-            CSS/hex text colour.
-
-        homepage
-            Default homepage/new-tab URL.
-
-        search_engine
-            Search engine identifier.
-
-        zoom
-            Default zoom percentage.
-
-BROWSER
-    --fullscreen
-    --exit-fullscreen
-    --javascript on
-    --javascript off
-    --light-mode
-    --dark-mode
-    --zoom-in
-    --zoom-out
-    --zoom N
-    --quiet
-
-KEYBOARD
-    Cmd+/                open LewWeb reference
-
-    Cmd+T                command palette
-    Cmd+W                close tab
-    Cmd+R                reload
-    Cmd+Left             back
-    Cmd+Right            forward
-    Cmd+1 ... Cmd+9      select tab
-
-    Ctrl+T               new tab
-    Ctrl+W               close tab
-    Ctrl+Tab             next tab
-    Ctrl+Shift+Tab       previous tab
-
-    Alt+Left             back
-    Alt+Right            forward
-
-    + / =                 zoom in
-    -                     zoom out
-    F11                   browser fullscreen
-
-EXAMPLES
-    lewweb --home
-    lewweb --search "jupiter" --wikipedia
-    lewweb --open "https://github.com"
-
-    lewweb --config ~/Documents/lewweb.json
-
-    lewweb --download-file \
-        "https://example.com/file.pdf" \
-        ~/Downloads
-
-    lewweb --download-pinterest-image \
-        "https://www.pinterest.com/pin/123456789/" \
-        ~/Pictures
-
-    lewweb --javascript on
-    lewweb --javascript off
-
-    lewweb --save-bookmark github
-    lewweb --open-bookmark github
-    lewweb --new-bookmark github https://github.com
-    lewweb --delete-bookmark github
-
-)";
-}
-
-
-static void printVersion()
-{
-    qInfo().noquote()
-        << "LewWeb "
-        << LEWWEB_VERSION;
-}
-
-
-static bool sendCommand(
-    const QByteArray &command
-)
-{
-    QLocalSocket socket;
-
-    socket.connectToServer(
-        SERVER_NAME
-    );
-
-    if (!socket.waitForConnected(250))
-        return false;
-
-    socket.write(command);
-    socket.flush();
-    socket.waitForBytesWritten(250);
-    socket.disconnectFromServer();
-
-    return true;
-}
-
-
-static void setupServer(
-    QLocalServer &server,
-    BrowserWindow &window
-)
-{
-    QLocalServer::removeServer(
-        SERVER_NAME
-    );
-
-    server.listen(
-        SERVER_NAME
-    );
-
-    QObject::connect(
-        &server,
-        &QLocalServer::newConnection,
-        &window,
-        [&server, &window]()
-        {
-            while (
-                server.hasPendingConnections()
-            )
-            {
-                QLocalSocket *socket =
-                    server.nextPendingConnection();
-
-                QObject::connect(
-                    socket,
-                    &QLocalSocket::readyRead,
-                    socket,
-                    [socket, &window]()
-                    {
-                        QList<QByteArray> commands =
-                            socket
-                                ->readAll()
-                                .split('\n');
-
-                        for (
-                            const QByteArray &command :
-                            commands
-                        )
-                        {
-                            if (command.isEmpty())
-                                continue;
-
-                            QJsonParseError error;
-
-                            QJsonDocument document =
-                                QJsonDocument::fromJson(
-                                    command,
-                                    &error
-                                );
-
-                            if (
-                                error.error !=
-                                QJsonParseError::NoError
-                            )
-                            {
-                                continue;
-                            }
-
-                            QJsonObject object =
-                                document.object();
-
-                            QString action =
-                                object["action"]
-                                    .toString();
-
-                            if (action == "open")
-                            {
-                                window.open(
-                                    QUrl(
-                                        object["url"]
-                                            .toString()
-                                    )
-                                );
-                            }
-                            else if (action == "search")
-                            {
-                                window.search(
-                                    object["query"]
-                                        .toString(),
-                                    object["site"]
-                                        .toString()
-                                );
-                            }
-                            else if (action == "home")
-                            {
-                                window.open(
-                                    QUrl(
-                                        "https://duckduckgo.com/"
-                                    )
-                                );
-                            }
-                            else if (action == "back")
-                            {
-                                window.back();
-                            }
-                            else if (action == "forward")
-                            {
-                                window.forward();
-                            }
-                            else if (action == "reload")
-                            {
-                                window.reload();
-                            }
-                            else if (action == "stop")
-                            {
-                                window.stop();
-                            }
-                            else if (action == "new-tab")
-                            {
-                                QString url =
-                                    object["url"]
-                                        .toString();
-
-                                if (url.isEmpty())
-                                {
-                                    url =
-                                        "https://duckduckgo.com/";
-                                }
-
-                                window.addTab(
-                                    QUrl(url)
-                                );
-                            }
-                            else if (action == "close-tab")
-                            {
-                                window.closeCurrentTab();
-                            }
-                            else if (action == "next-tab")
-                            {
-                                window.nextTab();
-                            }
-                            else if (action == "previous-tab")
-                            {
-                                window.previousTab();
-                            }
-                            else if (action == "tab")
-                            {
-                                window.selectTab(
-                                    object["index"]
-                                        .toInt() - 1
-                                );
-                            }
-                            else if (action == "zoom-in")
-                            {
-                                window.zoomIn();
-                            }
-                            else if (action == "zoom-out")
-                            {
-                                window.zoomOut();
-                            }
-                            else if (action == "zoom")
-                            {
-                                window.zoom(
-                                    object["value"]
-                                        .toInt()
-                                );
-                            }
-                            else if (action == "fullscreen")
-                            {
-                                window.fullscreen();
-                            }
-                            else if (action == "exit-fullscreen")
-                            {
-                                window.exitFullscreen();
-                            }
-                            else if (action == "javascript")
-                            {
-                                window.javascript(
-                                    object["enabled"]
-                                        .toBool()
-                                );
-                            }
-                            else if (action == "light-mode")
-                            {
-                                window.siteTheme("light");
-                            }
-                            else if (action == "dark-mode")
-                            {
-                                window.siteTheme("dark");
-                            }
-                            else if (action == "download-file")
-                            {
-                                window.downloadFile(
-                                    object["url"]
-                                        .toString(),
-                                    object["directory"]
-                                        .toString()
-                                );
-                            }
-                            else if (
-                                action ==
-                                "download-pinterest-image"
-                            )
-                            {
-                                window.downloadPinterestImage(
-                                    object["url"]
-                                        .toString(),
-                                    object["directory"]
-                                        .toString()
-                                );
-                            }
-                            else if (action == "list-tabs")
-                            {
-                                window.listTabs();
-                            }
-                            else if (action == "save-bookmark")
-                            {
-                                window.saveCurrentBookmark(
-                                    object["name"]
-                                        .toString()
-                                );
-                            }
-                            else if (action == "open-bookmark")
-                            {
-                                QString url =
-                                    bookmarkUrl(
-                                        object["name"]
-                                            .toString()
-                                    );
-
-                                if (!url.isEmpty())
-                                {
-                                    window.open(
-                                        QUrl(url)
-                                    );
-                                }
-                            }
-                            else if (action == "new-bookmark")
-                            {
-                                addBookmark(
-                                    object["name"]
-                                        .toString(),
-                                    object["url"]
-                                        .toString()
-                                );
-                            }
-                            else if (action == "delete-bookmark")
-                            {
-                                removeBookmark(
-                                    object["name"]
-                                        .toString()
-                                );
-                            }
-                            else if (action == "config")
-                            {
-                                QString path =
-                                    object["path"]
-                                        .toString();
-
-                                if (!path.isEmpty())
-                                {
-                                    BrowserConfig config =
-                                        loadConfig(path);
-
-                                    window.applyConfig(
-                                        config
-                                    );
-                                }
-                            }
-                        }
-
-                        socket->disconnectFromServer();
-                    }
-                );
-            }
-        }
-    );
-}
-
-
-int main(
-    int argc,
-    char *argv[]
-)
-{
-    for (
-        int i = 1;
-        i < argc;
-        ++i
-    )
-    {
-        if (
-            QString::fromLocal8Bit(argv[i]) ==
-            "--quiet"
-        )
-        {
-            qputenv(
-                "QT_LOGGING_RULES",
-                "*.debug=false;"
-                "*.info=false;"
-                "*.warning=false;"
-                "qt.webenginecontext=false;"
-                "qt.webengine*=false"
-            );
-
-            break;
-        }
-    }
-
-
-    QApplication app(
-        argc,
-        argv
-    );
-
+    QApplication app(argc, argv);
 
     QCoreApplication::setApplicationName(
-        "lewweb"
+        "LewWeb"
     );
 
     QCoreApplication::setApplicationVersion(
         LEWWEB_VERSION
     );
 
-
-    QCommandLineParser parser;
-
-    parser.setApplicationDescription(
-        "Terminal-controlled Qt web browser"
-    );
-
-    parser.addHelpOption();
-    parser.addVersionOption();
-
-
-    QCommandLineOption quietOption(
-        "quiet",
-        "Suppress Qt and Chromium logging."
-    );
-
-    QCommandLineOption configOption(
-        "config",
-        "Load browser configuration from a JSON file.",
-        "file"
-    );
-
-    QCommandLineOption openOption(
-        "open",
-        "Open URL.",
-        "url"
-    );
-
-    QCommandLineOption searchOption(
-        "search",
-        "Search DuckDuckGo.",
-        "query"
-    );
-
-    QCommandLineOption wikipediaOption(
-        "wikipedia",
-        "Search Wikipedia."
-    );
-
-    QCommandLineOption githubOption(
-        "github",
-        "Search GitHub."
-    );
-
-    QCommandLineOption youtubeOption(
-        "youtube",
-        "Search YouTube."
-    );
-
-    QCommandLineOption redditOption(
-        "reddit",
-        "Search Reddit."
-    );
-
-    QCommandLineOption googleOption(
-        "google",
-        "Search Google."
-    );
-
-    QCommandLineOption imagesOption(
-        "images",
-        "Search DuckDuckGo Images."
-    );
-
-    QCommandLineOption newsOption(
-        "news",
-        "Search DuckDuckGo News."
-    );
-
-    QCommandLineOption homeOption(
-        "home",
-        "Open configured homepage."
-    );
-
-    QCommandLineOption backOption(
-        "back",
-        "Go back."
-    );
-
-    QCommandLineOption forwardOption(
-        "forward",
-        "Go forward."
-    );
-
-    QCommandLineOption reloadOption(
-        "reload",
-        "Reload page."
-    );
-
-    QCommandLineOption stopOption(
-        "stop",
-        "Stop loading."
-    );
-
-    QCommandLineOption newTabOption(
-        "new-tab",
-        "Open a new tab."
-    );
-
-    QCommandLineOption closeTabOption(
-        "close-tab",
-        "Close current tab."
-    );
-
-    QCommandLineOption tabOption(
-        "tab",
-        "Select tab.",
-        "number"
-    );
-
-    QCommandLineOption nextTabOption(
-        "next-tab",
-        "Select next tab."
-    );
-
-    QCommandLineOption previousTabOption(
-        "previous-tab",
-        "Select previous tab."
-    );
-
-    QCommandLineOption listTabsOption(
-        "list-tabs",
-        "List tabs."
-    );
-
-    QCommandLineOption fullscreenOption(
-        "fullscreen",
-        "Toggle fullscreen."
-    );
-
-    QCommandLineOption exitFullscreenOption(
-        "exit-fullscreen",
-        "Exit fullscreen."
-    );
-
-    QCommandLineOption javascriptOption(
-        "javascript",
-        "Enable or disable JavaScript.",
-        "on|off"
-    );
-
-    QCommandLineOption lightModeOption(
-        "light-mode",
-        "Force a light colour scheme for web content."
-    );
-
-    QCommandLineOption darkModeOption(
-        "dark-mode",
-        "Force a dark colour scheme for web content."
-    );
-
-    QCommandLineOption zoomInOption(
-        "zoom-in",
-        "Increase zoom."
-    );
-
-    QCommandLineOption zoomOutOption(
-        "zoom-out",
-        "Decrease zoom."
-    );
-
-    QCommandLineOption zoomOption(
-        "zoom",
-        "Set zoom percentage.",
-        "percentage"
-    );
-
-    QCommandLineOption downloadFileOption(
-        "download-file",
-        "Download a file using Qt WebEngine.",
-        "url"
-    );
-
-    QCommandLineOption downloadPinterestOption(
-        "download-pinterest-image",
-        "Download a Pinterest image using lew-dlp.",
-        "url"
-    );
-
-    QCommandLineOption newBookmarkOption(
-        "new-bookmark",
-        "Create a bookmark.",
-        "name"
-    );
-
-    QCommandLineOption saveBookmarkOption(
-        "save-bookmark",
-        "Save current page as a bookmark.",
-        "name"
-    );
-
-    QCommandLineOption openBookmarkOption(
-        "open-bookmark",
-        "Open a bookmark.",
-        "name"
-    );
-
-    QCommandLineOption deleteBookmarkOption(
-        "delete-bookmark",
-        "Delete a bookmark.",
-        "name"
-    );
-
-
-    parser.addOption(quietOption);
-    parser.addOption(configOption);
-
-    parser.addOption(openOption);
-    parser.addOption(searchOption);
-
-    parser.addOption(wikipediaOption);
-    parser.addOption(githubOption);
-    parser.addOption(youtubeOption);
-    parser.addOption(redditOption);
-    parser.addOption(googleOption);
-    parser.addOption(imagesOption);
-    parser.addOption(newsOption);
-
-    parser.addOption(homeOption);
-
-    parser.addOption(backOption);
-    parser.addOption(forwardOption);
-    parser.addOption(reloadOption);
-    parser.addOption(stopOption);
-
-    parser.addOption(newTabOption);
-    parser.addOption(closeTabOption);
-    parser.addOption(tabOption);
-    parser.addOption(nextTabOption);
-    parser.addOption(previousTabOption);
-    parser.addOption(listTabsOption);
-
-    parser.addOption(fullscreenOption);
-    parser.addOption(exitFullscreenOption);
-    parser.addOption(javascriptOption);
-    parser.addOption(lightModeOption);
-    parser.addOption(darkModeOption);
-    parser.addOption(zoomInOption);
-    parser.addOption(zoomOutOption);
-    parser.addOption(zoomOption);
-
-    parser.addOption(downloadFileOption);
-    parser.addOption(downloadPinterestOption);
-
-    parser.addOption(newBookmarkOption);
-    parser.addOption(saveBookmarkOption);
-    parser.addOption(openBookmarkOption);
-    parser.addOption(deleteBookmarkOption);
-
-
-    parser.process(app);
-
-
-    if (parser.isSet("version"))
-    {
-        printVersion();
-        return 0;
-    }
-
-
-    bool hasAction =
-        parser.isSet(configOption) ||
-        parser.isSet(openOption) ||
-        parser.isSet(searchOption) ||
-        parser.isSet(homeOption) ||
-        parser.isSet(backOption) ||
-        parser.isSet(forwardOption) ||
-        parser.isSet(reloadOption) ||
-        parser.isSet(stopOption) ||
-        parser.isSet(newTabOption) ||
-        parser.isSet(closeTabOption) ||
-        parser.isSet(tabOption) ||
-        parser.isSet(nextTabOption) ||
-        parser.isSet(previousTabOption) ||
-        parser.isSet(listTabsOption) ||
-        parser.isSet(fullscreenOption) ||
-        parser.isSet(exitFullscreenOption) ||
-        parser.isSet(javascriptOption) ||
-        parser.isSet(lightModeOption) ||
-        parser.isSet(darkModeOption) ||
-        parser.isSet(zoomInOption) ||
-        parser.isSet(zoomOutOption) ||
-        parser.isSet(zoomOption) ||
-        parser.isSet(downloadFileOption) ||
-        parser.isSet(downloadPinterestOption) ||
-        parser.isSet(newBookmarkOption) ||
-        parser.isSet(saveBookmarkOption) ||
-        parser.isSet(openBookmarkOption) ||
-        parser.isSet(deleteBookmarkOption);
-
-
-    if (hasAction)
-    {
-        QJsonObject command;
-
-
-        if (parser.isSet(configOption))
-        {
-            command["action"] = "config";
-            command["path"] =
-                QFileInfo(
-                    parser.value(configOption)
-                ).absoluteFilePath();
-        }
-        else if (parser.isSet(openOption))
-        {
-            command["action"] = "open";
-            command["url"] =
-                parser.value(openOption);
-        }
-        else if (parser.isSet(searchOption))
-        {
-            command["action"] = "search";
-            command["query"] =
-                parser.value(searchOption);
-
-            if (parser.isSet(wikipediaOption))
-                command["site"] = "wikipedia";
-            else if (parser.isSet(githubOption))
-                command["site"] = "github";
-            else if (parser.isSet(youtubeOption))
-                command["site"] = "youtube";
-            else if (parser.isSet(redditOption))
-                command["site"] = "reddit";
-            else if (parser.isSet(googleOption))
-                command["site"] = "google";
-            else if (parser.isSet(imagesOption))
-                command["site"] = "images";
-            else if (parser.isSet(newsOption))
-                command["site"] = "news";
-        }
-        else if (parser.isSet(homeOption))
-        {
-            command["action"] = "home";
-        }
-        else if (parser.isSet(backOption))
-        {
-            command["action"] = "back";
-        }
-        else if (parser.isSet(forwardOption))
-        {
-            command["action"] = "forward";
-        }
-        else if (parser.isSet(reloadOption))
-        {
-            command["action"] = "reload";
-        }
-        else if (parser.isSet(stopOption))
-        {
-            command["action"] = "stop";
-        }
-        else if (parser.isSet(newTabOption))
-        {
-            command["action"] = "new-tab";
-        }
-        else if (parser.isSet(closeTabOption))
-        {
-            command["action"] = "close-tab";
-        }
-        else if (parser.isSet(nextTabOption))
-        {
-            command["action"] = "next-tab";
-        }
-        else if (parser.isSet(previousTabOption))
-        {
-            command["action"] = "previous-tab";
-        }
-        else if (parser.isSet(tabOption))
-        {
-            command["action"] = "tab";
-            command["index"] =
-                parser.value(tabOption).toInt();
-        }
-        else if (parser.isSet(listTabsOption))
-        {
-            command["action"] = "list-tabs";
-        }
-        else if (parser.isSet(fullscreenOption))
-        {
-            command["action"] = "fullscreen";
-        }
-        else if (parser.isSet(exitFullscreenOption))
-        {
-            command["action"] = "exit-fullscreen";
-        }
-        else if (parser.isSet(javascriptOption))
-        {
-            command["action"] = "javascript";
-            command["enabled"] =
-                parser.value(
-                    javascriptOption
-                ).toLower() != "off";
-        }
-        else if (parser.isSet(lightModeOption))
-        {
-            command["action"] = "light-mode";
-        }
-        else if (parser.isSet(darkModeOption))
-        {
-            command["action"] = "dark-mode";
-        }
-        else if (parser.isSet(zoomInOption))
-        {
-            command["action"] = "zoom-in";
-        }
-        else if (parser.isSet(zoomOutOption))
-        {
-            command["action"] = "zoom-out";
-        }
-        else if (parser.isSet(zoomOption))
-        {
-            command["action"] = "zoom";
-            command["value"] =
-                parser.value(zoomOption).toInt();
-        }
-        else if (parser.isSet(downloadFileOption))
-        {
-            command["action"] =
-                "download-file";
-
-            command["url"] =
-                parser.value(downloadFileOption);
-
-            const QStringList positional =
-                parser.positionalArguments();
-
-            if (!positional.isEmpty())
-                command["directory"] =
-                    positional.first();
-        }
-        else if (
-            parser.isSet(downloadPinterestOption)
-        )
-        {
-            command["action"] =
-                "download-pinterest-image";
-
-            command["url"] =
-                parser.value(
-                    downloadPinterestOption
-                );
-
-            const QStringList positional =
-                parser.positionalArguments();
-
-            if (!positional.isEmpty())
-                command["directory"] =
-                    positional.first();
-        }
-        else if (parser.isSet(newBookmarkOption))
-        {
-            command["action"] = "new-bookmark";
-            command["name"] =
-                parser.value(newBookmarkOption);
-
-            const QStringList positional =
-                parser.positionalArguments();
-
-            if (!positional.isEmpty())
-                command["url"] =
-                    positional.first();
-        }
-        else if (parser.isSet(saveBookmarkOption))
-        {
-            command["action"] = "save-bookmark";
-            command["name"] =
-                parser.value(saveBookmarkOption);
-        }
-        else if (parser.isSet(openBookmarkOption))
-        {
-            command["action"] = "open-bookmark";
-            command["name"] =
-                parser.value(openBookmarkOption);
-        }
-        else if (parser.isSet(deleteBookmarkOption))
-        {
-            command["action"] = "delete-bookmark";
-            command["name"] =
-                parser.value(deleteBookmarkOption);
-        }
-
-
-        QByteArray payload =
-            QJsonDocument(command)
-                .toJson(
-                    QJsonDocument::Compact
-                );
-
-        payload.append('\n');
-
-
-        if (sendCommand(payload))
-            return 0;
-    }
-
-
-    BrowserConfig config;
-
-    if (parser.isSet(configOption))
-    {
-        config =
-            loadConfig(
-                QFileInfo(
-                    parser.value(configOption)
-                ).absoluteFilePath()
-            );
-    }
-
+    BrowserConfig config =
+        loadConfig(configPath());
 
     QWebEngineProfile *profile =
         new QWebEngineProfile(
@@ -3128,15 +2185,17 @@ int main(
             &app
         );
 
-
     QString path =
         profilePath();
 
-
-    profile->setPersistentStoragePath(
-        path
-    );
-
+    /*
+     * Keep one persistent Chromium profile.
+     *
+     * This is important for login compatibility:
+     * cookies, local storage, IndexedDB, service-worker
+     * data and other persistent website state stay here.
+     */
+    profile->setPersistentStoragePath(path);
     profile->setCachePath(
         QDir(path).filePath("cache")
     );
@@ -3145,71 +2204,16 @@ int main(
         QWebEngineProfile::ForcePersistentCookies
     );
 
+    profile->setHttpAcceptLanguage(
+        "en-GB,en;q=0.9"
+    );
 
     BrowserWindow window(
         profile,
         config
     );
 
-
-    QLocalServer server;
-
-    setupServer(
-        server,
-        window
-    );
-
-
     window.show();
-
-
-    if (parser.isSet(openOption))
-    {
-        window.open(
-            QUrl(
-                parser.value(openOption)
-            )
-        );
-    }
-    else if (parser.isSet(searchOption))
-    {
-        QString site;
-
-        if (parser.isSet(wikipediaOption))
-            site = "wikipedia";
-        else if (parser.isSet(githubOption))
-            site = "github";
-        else if (parser.isSet(youtubeOption))
-            site = "youtube";
-        else if (parser.isSet(redditOption))
-            site = "reddit";
-        else if (parser.isSet(googleOption))
-            site = "google";
-        else if (parser.isSet(imagesOption))
-            site = "images";
-        else if (parser.isSet(newsOption))
-            site = "news";
-
-        window.search(
-            parser.value(searchOption),
-            site
-        );
-    }
-    else if (parser.isSet(homeOption))
-    {
-        window.open(
-            QUrl(config.homepage)
-        );
-    }
-    else if (parser.isSet(lightModeOption))
-    {
-        window.siteTheme("light");
-    }
-    else if (parser.isSet(darkModeOption))
-    {
-        window.siteTheme("dark");
-    }
-
 
     return app.exec();
 }
