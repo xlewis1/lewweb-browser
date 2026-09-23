@@ -1,10 +1,8 @@
 # LewWeb Browser
 
-**A keyboard-driven, CLI-controlled web browser built with C++ and QtWebEngine.**
+**A cross-platform graphical web browser built with C++ and QtWebEngine.**
 
-LewWeb is an experimental web browser built around a simple idea: **the browser itself doesn't need to be covered in buttons.**
-
-Instead of a traditional browser interface with visible tabs, an address bar, search bar, and toolbar, LewWeb puts its controls in the terminal and lets the browser window focus on the web.
+LewWeb is a conventional desktop web browser focused on a clean graphical interface, persistent browsing, tabbed browsing, and Chromium-based web compatibility.
 
 ## Features
 
@@ -12,59 +10,46 @@ Instead of a traditional browser interface with visible tabs, an address bar, se
 * **Qt 6**
 * **QtWebEngine**
 * **Chromium-based web rendering**
-* CLI-controlled browsing
-* Keyboard-driven interface
-* Invisible browser tabs
-* Built-in command palette
-* DuckDuckGo as the default search engine
-* Configurable browser appearance
-* Light and dark themes
+* Graphical browser interface
+* Tabbed browsing
+* Persistent browser profile
+* Persistent cookies, cache, and web storage
+* Address and search bar
+* Back, forward, reload, stop, and home controls
+* Bookmarks
+* Browsing history
+* Downloads
+* Light and dark browser themes
 * Configurable browser and border colours
+* Configurable homepage
+* Configurable search engine
+* Configurable zoom level
 * Browser fullscreen support
-* YouTube/video fullscreen support
+* Web/video fullscreen support
 * New-window and new-tab handling
-* Command completion through the command palette
+* Keyboard shortcuts
+* Favicons and page titles
+* JavaScript and local-storage support
 
 ## The Interface
 
-LewWeb deliberately doesn't look like a conventional web browser.
+LewWeb is designed to behave like a conventional graphical web browser.
 
-There is no permanent:
+The main browser window provides:
 
-* Tab bar
-* Address bar
-* Search bar
-* Toolbar full of buttons
+* A tab bar for managing open pages
+* An address/search bar
+* Navigation controls
+* Browser actions such as home, bookmarks, downloads, and new tabs
+* A Chromium-based web view for displaying websites
 
-Tabs still exist internally, but the tab bar is hidden. Browser control is handled through LewWeb's CLI and keyboard interface.
-
-Press **`Ctrl+T`** to open the LewWeb command palette.
-
-The palette uses the prompt:
-
-`lewweb:>$`
-
-Commands appear as you type, with completion available for supported commands.
-
-On macOS, **`Cmd+T`** opens a new browser tab.
-
-## Why?
-
-LewWeb started as an experiment in what a web browser could look like when the traditional browser chrome is removed.
-
-The goal isn't to recreate another existing browser or build a Vim browser.
-
-The idea is to make the **terminal and browser work together as one interface**.
-
-The terminal controls the browser.
-
-The browser displays the web.
+LewWeb also supports keyboard shortcuts for common browser actions while keeping the primary browsing experience inside the graphical window.
 
 ## Configuration
 
-LewWeb uses a JSON configuration file.
+LewWeb uses a JSON configuration file stored with the persistent browser profile.
 
-Configuration can control things such as:
+Configuration includes settings such as:
 
 * Window border style
 * Light/dark theme
@@ -76,34 +61,27 @@ Configuration can control things such as:
 * Search engine
 * Zoom level
 
-A configuration file can be supplied when launching LewWeb:
-
-`lewweb --config /path/to/lewweb.json`
+The configuration is saved so browser appearance and preferences persist between launches.
 
 ## Building
 
 LewWeb requires:
 
 * C++17 or newer
-* CMake
 * Qt 6
 * QtWebEngine
 
-LewWeb can be compiled directly using g++ or clang++. A build system such as CMake may also be used, but is not required.
+On macOS, LewWeb can be built against the Qt 6 frameworks and QtWebEngine libraries.
 
-Clone the repository and build it using the included build system.
-
-The resulting executable can then be run directly or installed somewhere on your `PATH`.
+The project can be compiled with a compatible C++ compiler. LewWeb is also developed within the author's own compiler/toolchain projects.
 
 ## Project Status
 
 **Version: 1.0.0**
 
-LewWeb is currently an experimental browser project and is actively being developed.
+LewWeb has evolved from an experimental browser concept into a conventional graphical desktop browser.
 
-The first version focuses on establishing the core architecture and the CLI-controlled browser experience.
-
-Expect things to change as the project develops.
+The current version focuses on providing a usable browser experience with tabs, persistent browsing data, navigation, bookmarks, downloads, themes, and Chromium-based web compatibility.
 
 ## Technology
 
@@ -111,104 +89,15 @@ LewWeb is built with:
 
 **C++ → Qt 6 → QtWebEngine → Chromium**
 
-Qt handles the application interface and browser integration, while QtWebEngine provides the underlying Chromium-based web rendering engine.
+Qt provides the application interface and browser integration, while QtWebEngine provides the underlying Chromium-based web rendering engine.
 
 ## Philosophy
 
-LewWeb follows a simple philosophy:
+LewWeb is built around a simple idea:
 
-> **Less browser chrome. More browser.**
+> **A browser should feel like a browser.**
 
-The interface doesn't try to imitate every feature of a conventional browser.
-
-Instead, it asks what happens when browsing is controlled primarily through commands and the keyboard.
-
-## Command-Line Options
-
-LewWeb is designed to be controlled from the command line. The browser provides options for navigation, searching, tabs, bookmarks, configuration, downloads, fullscreen, JavaScript, and zoom.
-
-| Option                             | Description                                   |
-| ---------------------------------- | --------------------------------------------- |
-| `-h, --help`                       | Displays help on command-line options.        |
-| `--help-all`                       | Displays help, including generic Qt options.  |
-| `-v, --version`                    | Displays version information.                 |
-| `--quiet`                          | Suppresses Qt and Chromium logging.           |
-| `--config <file>`                  | Loads browser configuration from a JSON file. |
-| `--open <url>`                     | Opens a URL.                                  |
-| `--search <query>`                 | Searches DuckDuckGo.                          |
-| `--wikipedia`                      | Searches Wikipedia.                           |
-| `--github`                         | Searches GitHub.                              |
-| `--youtube`                        | Searches YouTube.                             |
-| `--reddit`                         | Searches Reddit.                              |
-| `--google`                         | Searches Google.                              |
-| `--images`                         | Searches DuckDuckGo Images.                   |
-| `--news`                           | Searches DuckDuckGo News.                     |
-| `--home`                           | Opens the configured homepage.                |
-| `--back`                           | Goes back.                                    |
-| `--forward`                        | Goes forward.                                 |
-| `--reload`                         | Reloads the current page.                     |
-| `--stop`                           | Stops loading.                                |
-| `--new-tab`                        | Opens a new tab.                              |
-| `--close-tab`                      | Closes the current tab.                       |
-| `--tab <number>`                   | Selects a tab by number.                      |
-| `--next-tab`                       | Selects the next tab.                         |
-| `--previous-tab`                   | Selects the previous tab.                     |
-| `--list-tabs`                      | Lists open tabs.                              |
-| `--fullscreen`                     | Toggles fullscreen.                           |
-| `--exit-fullscreen`                | Exits fullscreen.                             |
-| `--javascript <on\|off>`           | Enables or disables JavaScript.               |
-| `--zoom-in`                        | Increases zoom.                               |
-| `--zoom-out`                       | Decreases zoom.                               |
-| `--zoom <percentage>`              | Sets the zoom percentage.                     |
-| `--download-file <url>`            | Downloads a file using Qt WebEngine.          |
-| `--download-pinterest-image <url>` | Downloads a Pinterest image using `lew-dlp`.  |
-| `--new-bookmark <name>`            | Creates a bookmark.                           |
-| `--save-bookmark <name>`           | Saves the current page as a bookmark.         |
-| `--open-bookmark <name>`           | Opens a bookmark.                             |
-| `--delete-bookmark <name>`         | Deletes a bookmark.                           |
-| `--list-bookmarks`                 | List bookmarks.                               |
-| `--hard-reset`                     | Reset all persistent LewWeb browser data.     |
-| `--save-config <File>`             | Save the current browser configuration.       |
-| ` --reset-config <File>`           | Reset a configuration file to defaults.       |
-| ` --show-url `                     | Print the current page URL.                   |
-
-(notice: lew-dlp is not yet on Github so it won't work.)
-
-### Examples
-
-Open a URL:
-
-`lewweb --open https://example.com`
-
-Search DuckDuckGo:
-
-`lewweb --search "Qt 6 documentation"`
-
-Open YouTube search:
-
-`lewweb --youtube "C programming language."`
-
-Open a specific tab:
-
-`lewweb --tab 2`
-
-Set zoom:
-
-`lewweb --zoom 125`
-
-Load a configuration:
-
-`lewweb --config /path/to/lewweb.json`
-
-Download a file:
-
-`lewweb --download-file https://example.com/file.zip`
-
-Download a Pinterest image through `lew-dlp`:
-
-`lewweb --download-pinterest-image <url>`
-
-
+The project began as an experiment with alternative browser interfaces and has evolved into a full graphical browser while keeping the project lightweight and under the author's control.
 
 ---
 
@@ -228,9 +117,9 @@ Qt is available under various licensing options, including the **GNU Lesser Gene
 
 For licensing information:
 
-[Qt Licensing](https://www.qt.io/licensing/?utm_source=chatgpt.com)
+[Qt Licensing](https://www.qt.io/licensing/)
 
-[Qt 6 Licensing Documentation](https://doc.qt.io/qt-6/licensing.html?utm_source=chatgpt.com)
+[Qt 6 Licensing Documentation](https://doc.qt.io/qt-6/licensing.html)
 
 ## Qt WebEngine
 
@@ -238,23 +127,23 @@ LewWeb uses **Qt WebEngine** for its web rendering functionality.
 
 Qt WebEngine incorporates **Chromium**, meaning distributions of Qt WebEngine are subject to the applicable licenses and notices for both the Qt WebEngine components and the Chromium components contained within it.
 
-For licensing information:
-
 ## Chromium
 
 LewWeb uses Chromium through Qt WebEngine.
 
 **Chromium is a project of The Chromium Authors and Google.**
 
-Chromium contains software distributed under multiple open-source licenses, including BSD, Apache, LGPL, and other applicable licenses depending on the individual component. The Chromium project maintains its own third-party licensing and attribution information.
+Chromium contains software distributed under multiple open-source licenses, including BSD, Apache, LGPL, and other applicable licenses depending on the individual component.
+
+The Chromium project maintains its own third-party licensing and attribution information.
 
 LewWeb does not claim ownership of Chromium or any of its third-party components.
 
-For Chromium licensing and third-party information:
-
 ## Third-Party Components
 
-Qt and Qt WebEngine may contain additional third-party software distributed under their own respective licenses. Only the components actually included in a particular distribution are subject to the corresponding attribution and licensing requirements. Qt provides a list of third-party components and their licenses in its documentation.
+Qt and Qt WebEngine may contain additional third-party software distributed under their own respective licenses.
+
+Only the components actually included in a particular distribution are subject to the corresponding attribution and licensing requirements.
 
 Users redistributing LewWeb should ensure that they comply with all applicable licenses and notices for the versions of Qt, Qt WebEngine, Chromium, and other third-party components included with their distribution.
 
@@ -277,9 +166,11 @@ The author of LewWeb is not responsible for the content, availability, security,
 Third-party software included or used by LewWeb remains subject to its own respective licenses and terms.
 
 ---
-Copyright © 2026 Lewis Overall (xlewis1)
+
+Copyright © 2026 **xlewis1**
+
 LewWeb is licensed under the Apache License 2.0.
 
 **LewWeb 1.0.0**
 
-Copyright © 2026 Lewis Overall.
+Copyright © 2026 **xlewis1**
