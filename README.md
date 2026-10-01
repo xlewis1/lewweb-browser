@@ -165,6 +165,8 @@ The author of LewWeb is not responsible for the content, availability, security,
 
 Third-party software included or used by LewWeb remains subject to its own respective licenses and terms.
 
+Homepage uses stock images from picsum which is a free API for background images.
+
 ---
 
 Copyright © 2026 **xlewis1**
